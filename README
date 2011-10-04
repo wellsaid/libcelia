@@ -1,0 +1,12 @@
+This library implement the Goyal-Pandey-Sahai-Waters KP-ABE scheme
+The KP-ABE library borrow some code from CP-ABE library created by
+John Bethencourt <bethenco@cs.berkeley.edu>
+
+To install this software, you will need to have the Pairing-Based
+Cryptography (PBC) library installed. You can get it from the
+following page:
+
+   http://crypto.stanford.edu/pbc/
+
+Email Yao Zheng <zhengyao@wpi.edu> with any questions, comments, 
+or bug reports.

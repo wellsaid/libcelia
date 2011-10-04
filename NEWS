@@ -1,0 +1,14 @@
+Release 0.3: Thursday, April 14, 2011
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Add documentation, fix bug when encypt attribute is not in attribute universe
+
+Release 0.2: Friday, April 1, 2011
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fix the problem of over size master key and public key
+
+Release 0.1: Monday, March 7, 2011
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First version of the library.

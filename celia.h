@@ -43,7 +43,8 @@ typedef struct
 	pairing_t p;
 	element_t g;           /* G_1 */
 	element_t Y; 		   /* G_T */
-	GArray* comps;		   /* kpabe_pub_comp_t */
+	kpabe_pub_comp_t* comps;
+	size_t comps_len;
 }
 kpabe_pub_t;
 
@@ -63,7 +64,8 @@ kpabe_msk_comp_t;
 typedef struct
 {
 	element_t y;    	/* Z_p */
-	GArray* comps;		/* kpabe_msk_comp_t */
+	kpabe_msk_comp_t* comps;
+	size_t comps_len;
 }
 kpabe_msk_t;
 
@@ -75,13 +77,16 @@ typedef struct
 }
 kpabe_polynomial_t;
 
-typedef struct
+typedef struct kpabe_policy_t kpabe_policy_t;
+  
+struct kpabe_policy_t
 {
 	/* serialized */
 	int k;            /* one if leaf, otherwise threshold */
 	char* attr;       /* attribute string if leaf, otherwise null */
 	element_t D;      /* G_1, only for leaves */
-	GPtrArray* children; /* pointers to kpabe_policy_t's, len == 0 for leaves */
+	kpabe_policy_t** children; /* pointers to kpabe_policy_t's, NULL for leaves */
+	size_t children_len;
 
 	/* only used during encryption */
 	kpabe_polynomial_t* q;
@@ -90,9 +95,9 @@ typedef struct
 	int satisfiable;
 	int min_leaves;
 	int attri;
-	GArray* satl;
-}
-kpabe_policy_t;
+	int* satl;
+	size_t satl_len;
+};
 
 /*
   A private key.
@@ -119,35 +124,30 @@ kpabe_cph_comp_t;
 typedef struct
 {
 	element_t Ep; 		/* G_T */
-	GArray* comps;		/* kpabe_cph_comp_t */
+	kpabe_cph_comp_t* comps;
+	size_t comps_len;
 }
 kpabe_cph_t;
 
 /*
   core function
 */
-void kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes );
-kpabe_prv_t* kpabe_keygen( kpabe_pub_t* pub,kpabe_msk_t* msk,char* policy );
-kpabe_cph_t* kpabe_enc( kpabe_pub_t* pub, element_t m, char** attributes );
-int kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m );
+void kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes );
+kpabe_prv_t* kpabe_keygen( kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy );
+size_t kpabe_enc( char** c, kpabe_pub_t* pub, char* m, size_t m_len, char** attributes, size_t num_attributes );
+size_t kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len);
+
 
 /*
   Exactly what it seems.
 */
-GByteArray* kpabe_pub_serialize( kpabe_pub_t* pub );
-GByteArray* kpabe_msk_serialize( kpabe_msk_t* msk );
-GByteArray* kpabe_prv_serialize( kpabe_prv_t* prv );
-GByteArray* kpabe_cph_serialize( kpabe_cph_t* cph );
+size_t kpabe_cph_serialize( char** b, kpabe_cph_t* cph );
 
 /*
-  Also exactly what it seems. If free is true, the GByteArray passed
-  in will be free'd after it is read.
+  Also exactly what it seems.
 */
-kpabe_pub_t* kpabe_pub_unserialize( GByteArray* b, int free );
-kpabe_msk_t* kpabe_msk_unserialize( kpabe_pub_t* pub, GByteArray* b, int free );
-kpabe_prv_t* kpabe_prv_unserialize( kpabe_pub_t* pub, GByteArray* b, int free );
-kpabe_cph_t* kpabe_cph_unserialize( kpabe_pub_t* pub, GByteArray* b, int free );
-
+kpabe_cph_t* kpabe_cph_unserialize( kpabe_pub_t* pub, char* b);
+    
 /*
   Again, exactly what it seems.
 */
@@ -162,6 +162,12 @@ void kpabe_cph_free( kpabe_cph_t* cph );
   need to be free'd.
 */
 char* kpabe_error();
+
+/*
+ * AES CBC Encryption/Decryption functions
+*/
+size_t aes_128_cbc_encrypt( char** ct, char* pt, size_t pt_len, element_t k );
+size_t aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k );
 
 #if defined (__cplusplus)
 } // extern "C"

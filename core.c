@@ -23,8 +23,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <openssl/sha.h>
-#include <glib.h>
 #include <pbc.h>
 #include "celia.h"
 
@@ -110,13 +108,15 @@ raise_error(char* fmt, ...)
  * @param pub			Pointer to the public key data structure
  * @param msk			Pointer to the master key data structure
  * @param attributes	Attributes list
+ * @param num_attributes  The number of attributes in the list
  * @return				none.
  */
 
 void
-kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes )
+kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes )
 {
 	element_t tmp;	/* G_1 */
+	int i;
 
 	/* initialize */
 
@@ -131,9 +131,11 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes )
 	element_init_GT((*pub)->Y,			 (*pub)->p);
 	element_init_Zr((*msk)->y,			 (*pub)->p);
 
-	(*pub)->comps = g_array_new(0, 1, sizeof(kpabe_pub_comp_t));
-	(*msk)->comps = g_array_new(0, 1, sizeof(kpabe_msk_comp_t));
-
+	(*pub)->comps = malloc(num_attributes*sizeof(kpabe_pub_comp_t));
+	(*pub)->comps_len = 0;
+	(*msk)->comps = malloc(num_attributes*sizeof(kpabe_msk_comp_t));
+	(*msk)->comps_len = 0;
+	
 	/* compute */
 
  	element_random((*msk)->y);
@@ -142,12 +144,12 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes )
 	element_pow_zn(tmp, (*pub)->g, (*msk)->y);
 	pairing_apply((*pub)->Y, (*pub)->g, tmp, (*pub)->p);
 
-	while( *attributes )
+	for( i = 0; i < num_attributes; i++)
 	{
 		kpabe_pub_comp_t TA;
 		kpabe_msk_comp_t ta;
 
-		TA.attr = *(attributes++);
+		TA.attr = attributes[i];
 		ta.attr = TA.attr;
 
 		element_init_Zr(ta.t,(*pub)->p);
@@ -156,8 +158,10 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes )
  		element_random(ta.t);
 		element_pow_zn(TA.T, (*pub)->g, ta.t);
 
-		g_array_append_val((*pub)->comps, TA);
-		g_array_append_val((*msk)->comps, ta);
+		(*pub)->comps[i] =  TA;
+		(*pub)->comps_len++;
+		(*msk)->comps[i] = ta;
+		(*msk)->comps_len++;
 	}
 
 }
@@ -165,54 +169,57 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes )
 /*!
  * Encrypt a secret message with the provided attributes list, return a ciphertext.
  *
+ * @param c                           Byte array containing ciphertext
  * @param pub			Public key structure
- * @param m				Secret Message
+ * @param m				Byte array containing plaintext
+ * @param m_len                   Length of the plaintext
  * @param attributes	Attributes list
- * @return				Ciphertext structure
+ * @return				Length of ciphertext
  */
 
-kpabe_cph_t*
-kpabe_enc( kpabe_pub_t* pub, element_t m, char** attributes )
+size_t
+kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes, size_t num_attributes )
 {
 	kpabe_cph_t* cph;
+	element_t m_e;
  	element_t s;
- 	int i;
+	int i, j;
+	uint8_t byte;
 
 	/* initialize */
-
 	cph = malloc(sizeof(kpabe_cph_t));
 
 	element_init_Zr(s, pub->p);
-	element_init_GT(m, pub->p);
+	element_init_GT(m_e, pub->p);
 	element_init_GT(cph->Ep, pub->p);
 
 	/* compute */
-
- 	element_random(m);
+ 	element_random(m_e);
  	element_random(s);
 	element_pow_zn(cph->Ep, pub->Y, s);
-	element_mul(cph->Ep, cph->Ep, m);
+	element_mul(cph->Ep, cph->Ep, m_e);
 
-	cph->comps = g_array_new(0, 1, sizeof(kpabe_cph_comp_t));
+	cph->comps = malloc(num_attributes*sizeof(kpabe_cph_comp_t));
+	cph->comps_len = 0;
 
-	while( *attributes )
+	for( i = 0; i < num_attributes; i++)
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = *(attributes++);
+		c.attr = attributes[i];
 
 		element_init_G1(c.E, pub->p);
 
-		for( i = 0; i < pub->comps->len; i++ )
+		for( j = 0; j < pub->comps_len; j++ )
 		{
-			if( !strcmp(g_array_index(pub->comps, kpabe_pub_comp_t, i).attr, c.attr) )
+			if( !strcmp(pub->comps[j].attr, c.attr) )
 			{
-				element_pow_zn(c.E, g_array_index(pub->comps, kpabe_pub_comp_t, i).T, s);
+				element_pow_zn(c.E, pub->comps[j].T, s);
 				break;
 			}
 			else
 			{
-				if(i == (pub->comps->len - 1))
+				if(j == (pub->comps_len - 1))
 				{
 					raise_error("Check your attribute universe,\nCertain attribute not include!\n");
 					return 0;
@@ -220,10 +227,52 @@ kpabe_enc( kpabe_pub_t* pub, element_t m, char** attributes )
 			}
 		}
 
-		g_array_append_val(cph->comps, c);
+		memcpy(&cph->comps[i], &c, sizeof(kpabe_cph_comp_t));
+		cph->comps_len++;
 	}
 
-	return cph;
+	char* cph_buf = NULL;
+	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
+	kpabe_cph_free(cph);
+
+	char* aes_buf = NULL;
+	size_t aes_buf_len = aes_128_cbc_encrypt(&aes_buf, m, m_len, m_e);
+	element_clear(m_e);
+
+	size_t c_len = 12 + aes_buf_len + cph_buf_len;
+	*c = malloc(c_len);
+
+	size_t a = 0;
+
+	/* write plaintext len as 32-bit big endian int */
+	for( i = 3; i >= 0; i-- )
+	{
+		byte = (m_len & 0xff<<(i*8))>>(i*8);
+		(*c)[a] = byte;
+		a++;
+	}
+
+	/* write aes_buf */
+	for( i = 3; i >= 0; i-- ){
+		byte = (aes_buf_len & 0xff<<(i*8))>>(i*8);
+		(*c)[a] = byte;
+		a++;
+	}
+	memcpy(*c + a, aes_buf, aes_buf_len);
+	a += aes_buf_len;
+
+	/* write cph_buf */
+	for( i = 3; i >= 0; i-- ){
+		byte = (cph_buf_len & 0xff<<(i*8))>>(i*8);
+		(*c)[a] = byte;
+		a++;
+	}
+	memcpy(*c + a, cph_buf, cph_buf_len);
+
+	free(cph_buf);
+	free(aes_buf);
+	
+	return c_len;
 }
 
 /*!
@@ -242,10 +291,28 @@ base_node( int k, char* s )
 	p = (kpabe_policy_t*) malloc(sizeof(kpabe_policy_t));
 	p->k = k;
 	p->attr = s ? strdup(s) : 0;
-	p->children = g_ptr_array_new();
+	p->children = NULL;
+	p->children_len = 0;
 	p->q = 0;
 
 	return p;
+}
+
+/* Helper method:
+ *     Counts the number of tokens in the string
+ */
+size_t
+strtok_count( char* s,  const char* delim )
+{
+	int count = 0;
+	char *ptr = s;
+	while((ptr = strpbrk(ptr, delim)) != NULL)
+	{
+		count++;
+		ptr++;
+	}
+
+	return count;
 }
 
 /*!
@@ -263,28 +330,25 @@ base_node( int k, char* s )
 kpabe_policy_t*
 parse_policy_postfix( char* s )
 {
-	char** toks;
-	char** cur_toks;
 	char*  tok;
-	GPtrArray* stack; /* pointers to kpabe_policy_t's */
-	kpabe_policy_t* root;
+	kpabe_policy_t* stack;
+	size_t stack_len = 0;
+	kpabe_policy_t* top;
 
-	toks     = g_strsplit(s, " ", 0);
-	cur_toks = toks;
-	stack    = g_ptr_array_new();
+	stack    = malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
+	top = stack;
 
-	while( *cur_toks )
+	tok = strtok(s, " ");
+	while( tok )
 	{
 		int i, k, n;
-
-		tok = *(cur_toks++);
-
-		if( !*tok )
-			continue;
-
+		
 		if( sscanf(tok, "%dof%d", &k, &n) != 2 )
+		{
 			/* push leaf token */
-			g_ptr_array_add(stack, base_node(1, tok));
+			memcpy(top++, base_node(1, tok), sizeof(kpabe_policy_t));
+			stack_len++;
+		}
 		else
 		{
 			kpabe_policy_t* node;
@@ -306,38 +370,47 @@ parse_policy_postfix( char* s )
 				raise_error("error parsing \"%s\": identity operator \"%s\"\n", s, tok);
 				return 0;
 			}
-			else if( n > stack->len )
+			else if( n > stack_len )
 			{
 				raise_error("error parsing \"%s\": stack underflow at \"%s\"\n", s, tok);
 				return 0;
 			}
-
+			
 			/* pop n things and fill in children */
 			node = base_node(k, 0);
-			g_ptr_array_set_size(node->children, n);
+			node->children = malloc(n*sizeof(kpabe_policy_t));
 			for( i = n - 1; i >= 0; i-- )
-				node->children->pdata[i] = g_ptr_array_remove_index(stack, stack->len - 1);
+			{
+			        node->children[i] = malloc(sizeof(kpabe_policy_t));
+				memcpy(node->children[i], --top, sizeof(kpabe_policy_t));
+				stack_len--;
+				node->children_len++;
+			}
 
 			/* push result */
-			g_ptr_array_add(stack, node);
+			memcpy(top++, node, sizeof(kpabe_policy_t));
+			stack_len++;
+
+			free(node);
 		}
+
+		tok = strtok(NULL, " ");
 	}
 
-	if( stack->len > 1 )
+	if( stack_len > 1 )
 	{
 		raise_error("error parsing \"%s\": extra tokens left on stack\n", s);
 		return 0;
 	}
-	else if( stack->len < 1 )
+	else if( stack_len < 1 )
 	{
 		raise_error("error parsing \"%s\": empty policy\n", s);
 		return 0;
 	}
 
-	root = g_ptr_array_index(stack, 0);
-
- 	g_strfreev(toks);
- 	g_ptr_array_free(stack, 0);
+	kpabe_policy_t* root = malloc(sizeof(kpabe_policy_t));
+	memcpy(root, --top, sizeof(kpabe_policy_t));
+	free(stack);
 
 	return root;
 }
@@ -364,10 +437,10 @@ rand_poly( int deg, element_t zero_val )
 		element_init_same_as(q->coef[i], zero_val);
 
 	element_set(q->coef[0], zero_val);
-
+	
 	for( i = 1; i < q->deg + 1; i++ )
  		element_random(q->coef[i]);
-
+	
 	return q;
 }
 
@@ -430,36 +503,39 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
 
 	p->q = rand_poly(p->k - 1, e);
 
-	if( p->children->len == 0 )
+	if( p->children == NULL )
 	{
 		element_init_G1(p->D,  pub->p);
 
-		for( i = 0; i < msk->comps->len; i++ )
+		for( i = 0; i < msk->comps_len; i++ )
 		{
-			if( !strcmp(g_array_index(msk->comps, kpabe_msk_comp_t, i).attr, p->attr) )
+			if( !strcmp(msk->comps[i].attr, p->attr) )
 			{
-				element_div(a, p->q->coef[0], g_array_index(msk->comps, kpabe_msk_comp_t, i).t);
+				element_div(a, p->q->coef[0], msk->comps[i].t);
 				element_pow_zn(p->D, pub->g, a);
 				break;
 			}
 			else
 			{
-				if(i == (msk->comps->len - 1))
+				if(i == (msk->comps_len - 1))
 				{
 					raise_error("Check your attribute universe,\nCertain attribute not included!\n");
 					return 0;
 				}
+
 			}
 		}
 	}
 	else
-		for( i = 0; i < p->children->len; i++ )
+	{
+		for( i = 0; i < p->children_len; i++ )
 		{
 			element_set_si(r, i + 1);
 			eval_poly(t, p->q, r);
-			if(!fill_policy(g_ptr_array_index(p->children, i), pub, msk, t))
+			if(!fill_policy(p->children[i], pub, msk, t))
 				return 0;
 		}
+	}
 
 	element_clear(r);
 	element_clear(t);
@@ -482,16 +558,14 @@ kpabe_keygen( kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
 	kpabe_prv_t* prv;
 
 	/* initialize */
-
 	prv = malloc(sizeof(kpabe_prv_t));
 
 	prv->p = parse_policy_postfix(policy);
 
 	/* compute */
-
 	if(!fill_policy(prv->p, pub, msk, msk->y))
 		return 0;
-
+	
 	return prv;
 }
 
@@ -507,30 +581,30 @@ kpabe_keygen( kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
  */
 
 int
-check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
+check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da verificare */
 {
 	int i, l;
 
 	p->satisfiable = 0;
-	if( p->children->len == 0 )
+	if( p->children_len == 0 )
 	{
-		for( i = 0; i < cph->comps->len; i++ )
-			if( !strcmp(g_array_index(cph->comps, kpabe_cph_comp_t, i).attr,
-									p->attr) )
+		for( i = 0; i < cph->comps_len; i++ )
+		{
+			if( !strcmp(cph->comps[i].attr, p->attr) )
 			{
 				p->satisfiable = 1;
 				p->attri = i;
 				break;
 			}
-		for( i = 0; i < pub->comps->len; i++ )
-			if( !strcmp(g_array_index(pub->comps, kpabe_pub_comp_t, i).attr,
-					                p->attr) )
+		}
+		for( i = 0; i < pub->comps_len; i++ )
+			if( !strcmp(pub->comps[i].attr, p->attr) )
 			{
 				break;
 			}
 			else
 			{
-				if(i == (pub->comps->len - 1))
+				if(i == (pub->comps_len - 1))
 				{
 					raise_error("Check your attribute universe,\nCertain attribute not included!\n");
 					return 0;
@@ -539,18 +613,23 @@ check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 	}
 	else
 	{
-		for( i = 0; i < p->children->len; i++ )
-			if(!check_sat(g_ptr_array_index(p->children, i), cph, pub))
+		for( i = 0; i < p->children_len; i++ )
+			if(!check_sat(p->children[i], cph, pub))
+			{
 				return 0;
+			}
 
 		l = 0;
-		for( i = 0; i < p->children->len; i++ )
-			if( ((kpabe_policy_t*) g_ptr_array_index(p->children, i))->satisfiable )
-				l++;
-
+		for( i = 0; i < p->children_len; i++ )
+			if( ((kpabe_policy_t*) p->children[i])->satisfiable )
+			{
+			    l++;
+			}
+		
 		if( l >= p->k )
 			p->satisfiable = 1;
 	}
+
 	return 1;
 }
 
@@ -564,12 +643,12 @@ check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 
 kpabe_policy_t* cur_comp_pol;
 int
-cmp_int( const void* a, const void* b )
+cmp_int( const void* a, const void* b ) /* DONE! Da verificare */
 {
 	int k, l;
 
-	k = ((kpabe_policy_t*) g_ptr_array_index(cur_comp_pol->children, *((int*)a)))->min_leaves;
-	l = ((kpabe_policy_t*) g_ptr_array_index(cur_comp_pol->children, *((int*)b)))->min_leaves;
+	k = ((kpabe_policy_t*) cur_comp_pol->children[*((int*)a)])->min_leaves;
+	l = ((kpabe_policy_t*) cur_comp_pol->children[*((int*)b)])->min_leaves;
 
 	return
 		k <  l ? -1 :
@@ -585,39 +664,48 @@ cmp_int( const void* a, const void* b )
  */
 
 void
-pick_sat_min_leaves( kpabe_policy_t* p )
+pick_sat_min_leaves( kpabe_policy_t* p ) /* DONE! Da verificare */
 {
-	int i, k, l;
+	int i, k, l = 0;
 	int* c;
 
 	assert(p->satisfiable == 1);
 
-	if( p->children->len == 0 )
+	if( p->children_len == 0 )
 		p->min_leaves = 1;
 	else
 	{
-		for( i = 0; i < p->children->len; i++ )
-			if( ((kpabe_policy_t*) g_ptr_array_index(p->children, i))->satisfiable )
-				pick_sat_min_leaves(g_ptr_array_index(p->children, i));
+		for( i = 0; i < p->children_len; i++ )
+			if( ((kpabe_policy_t*) p->children[i])->satisfiable )
+				pick_sat_min_leaves(p->children[i]);
 
-		c = alloca(sizeof(int) * p->children->len);
-		for( i = 0; i < p->children->len; i++ )
+		c = malloc(sizeof(int) * p->children_len);
+		for( i = 0; i < p->children_len; i++ )
 			c[i] = i;
 
 		cur_comp_pol = p;
-		qsort(c, p->children->len, sizeof(int), cmp_int);
+		qsort(c, p->children_len, sizeof(int), cmp_int);
 
-		p->satl = g_array_new(0, 0, sizeof(int));
+		/* count how many satl we need */
+		p->satl_len = 0;
+		for( i = 0; i < p->children_len && l < p->k; i++ )
+			if( ((kpabe_policy_t*) p->children[c[i]])->satisfiable )
+			{
+				p->satl_len++;
+			}
+		
+		p->satl = malloc(p->satl_len*sizeof(int));
+		p->satl_len = 0;
 		p->min_leaves = 0;
 		l = 0;
 
-		for( i = 0; i < p->children->len && l < p->k; i++ )
-			if( ((kpabe_policy_t*) g_ptr_array_index(p->children, c[i]))->satisfiable )
+		for( i = 0; i < p->children_len && l < p->k; i++ )
+			if( ((kpabe_policy_t*) p->children[c[i]])->satisfiable )
 			{
 				l++;
-				p->min_leaves += ((kpabe_policy_t*) g_ptr_array_index(p->children, c[i]))->min_leaves;
+				p->min_leaves += ((kpabe_policy_t*) p->children[c[i]])->min_leaves;
 				k = c[i] + 1;
-				g_array_append_val(p->satl, k);
+				p->satl[p->satl_len++] = k;
 			}
 		assert(l == p->k);
 	}
@@ -628,12 +716,13 @@ pick_sat_min_leaves( kpabe_policy_t* p )
  *
  * @param r				Lagrange coefficient
  * @param s				satisfiable node set
+ * @param s_len                    length of node set
  * @param i				index of this node in the satisfiable node set
  * @return				None
  */
 
 void
-lagrange_coef( element_t r, GArray* s, int i )
+lagrange_coef( element_t r, int* s, size_t s_len, int i ) /* DONE! Da verificare */
 {
 	int j, k;
 	element_t t;
@@ -641,9 +730,9 @@ lagrange_coef( element_t r, GArray* s, int i )
 	element_init_same_as(t, r);
 
 	element_set1(r);
-	for( k = 0; k < s->len; k++ )
+	for( k = 0; k < s_len; k++ )
 	{
-		j = g_array_index(s, int, k);
+		j = s[k];
 		if( j == i )
 			continue;
 		element_set_si(t, - j);
@@ -669,12 +758,12 @@ lagrange_coef( element_t r, GArray* s, int i )
 
 void
 dec_leaf_flatten( element_t r, element_t exp,
-									kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
+									kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da verificare */
 {
 	kpabe_cph_comp_t* c;
 	element_t s;
 
-	c = &(g_array_index(cph->comps, kpabe_cph_comp_t, p->attri));
+	c = &(cph->comps[p->attri]);
 
 	element_init_GT(s, pub->p);
 
@@ -701,7 +790,7 @@ void dec_node_flatten( element_t r, element_t exp,
 
 void
 dec_internal_flatten( element_t r, element_t exp,
-											kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
+											kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da verificare */
 {
 	int i;
 	element_t t;
@@ -710,12 +799,11 @@ dec_internal_flatten( element_t r, element_t exp,
 	element_init_Zr(t, pub->p);
 	element_init_Zr(expnew, pub->p);
 
-	for( i = 0; i < p->satl->len; i++ )
+	for( i = 0; i < p->satl_len; i++ )
 	{
- 		lagrange_coef(t, p->satl, g_array_index(p->satl, int, i));
+		lagrange_coef(t, p->satl, p->satl_len, p->satl[i]);
 		element_mul(expnew, exp, t); /* num_muls++; */
-		dec_node_flatten(r, expnew, g_ptr_array_index
-										 (p->children, g_array_index(p->satl, int, i) - 1), cph, pub);
+		dec_node_flatten(r, expnew, p->children[p->satl[i] - 1], cph, pub);
 	}
 
 	element_clear(t);
@@ -738,7 +826,7 @@ dec_node_flatten( element_t r, element_t exp,
 									kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 {
 	assert(p->satisfiable);
-	if( p->children->len == 0 )
+	if( p->children_len == 0 )
 		dec_leaf_flatten(r, exp, p, cph, pub);
 	else
 		dec_internal_flatten(r, exp, p, cph, pub);
@@ -772,24 +860,60 @@ dec_flatten( element_t r, kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub 
 /*!
  * Decrypt the secret message m
  *
+ * @param m                                 Byte string which will contain the plaintext
  * @param pub				Public key data structure
  * @param prv				Private key data structure
- * @param cph				Ciphertext data structure
- * @param m					Secret message
- * @return int				Successfully decrypt or not
+ * @param c                                   Byte string containing ciphertext
+ * @param c_len                            Length of 'c'
+ * @return int				Successfully decrypt (size of 'm') or not (0)
  */
 
-int
-kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m )
+size_t
+kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
 {
-	element_t Ys;
+	int i;
+	size_t a = 0;
 
-	element_init_GT(m, pub->p);
+	kpabe_cph_t* cph;
+        
+	/* read plaintext len as 32-bit big endian int */
+    	size_t m_len = 0;
+	for( i = 3; i >= 0; i-- )
+	{
+		m_len |= c[a]<<(i*8);
+		a++;
+	}
+
+	/* read aes buf */
+	size_t aes_buf_len = 0;
+	for( i = 3; i >= 0; i-- )
+	{
+		aes_buf_len |= c[a]<<(i*8);
+		a++;
+	}
+	char *aes_buf = malloc(aes_buf_len);
+	memcpy(aes_buf, c + a, aes_buf_len);
+	a += aes_buf_len;
+    
+	/* read cph buf */
+	size_t cph_buf_len = 0;
+	for( i = 3; i >= 0; i-- )
+	{
+		cph_buf_len |= c[a]<<(i*8);
+		a++;
+	}
+	char* cph_buf = malloc(cph_buf_len);
+	memcpy(cph_buf, c + a, cph_buf_len);	
+	
+	element_t Ys, m_e;
+	element_init_GT(m_e, pub->p);
 	element_init_GT(Ys, pub->p);
 
-	if(!check_sat(prv->p, cph, pub))
+	cph = kpabe_cph_unserialize(pub, cph_buf);
+	
+	if(!check_sat(prv->p,  cph, pub))
 		return 0;
-	if( !prv->p->satisfiable )
+ 	if( !prv->p->satisfiable )
 	{
 		raise_error("cannot decrypt, attributes in ciphertext do not satisfy policy\n");
 		return 0;
@@ -797,7 +921,14 @@ kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m )
 
 	pick_sat_min_leaves(prv->p);
 	dec_flatten(Ys, prv->p, cph, pub);
-	element_div(m, cph->Ep, Ys);
+	element_div(m_e, cph->Ep, Ys);
 
-	return 1;
+	kpabe_cph_free(cph);
+
+	m_len = aes_128_cbc_decrypt(m, aes_buf, aes_buf_len, m_e);
+
+	free(aes_buf);
+	free(cph_buf);
+
+	return m_len;
 }

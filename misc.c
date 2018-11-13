@@ -22,52 +22,169 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <glib.h>
 #include <pbc.h>
+#include <mbedtls/aes.h>
 #include "celia.h"
+
 
 /********************************************************************************
  * Utility functions
  ********************************************************************************/
 
 /*!
- * Serialize a 32 bit unsign integer to a GByteArray.
+ * Initialize parameters for AES symmetric-key encryption
  *
- * @param b					GByteArray.
- * @param k					Unsign integer
- * @return					None
+ * @param ctx                        Pointer to the aes context
+ * @param k				Sercet message from KP-ABE
+ * @param enc			Set encrypt key when enc = 1; Set decrypt key when enc = 0;
+ * @param iv			        Salt
+ * @return				None
  */
 
 void
-serialize_uint32( GByteArray* b, uint32_t k )
+init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 {
+	int key_len;
+	unsigned char* key_buf;
+
+	key_len = element_length_in_bytes(k) < 17 ? 17 : element_length_in_bytes(k);
+	key_buf = (unsigned char*) malloc(key_len);
+	element_to_bytes(key_buf, k);
+
+	if( enc )
+		mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
+	else
+		mbedtls_aes_setkey_dec(ctx, key_buf + 1, 128);
+	free(key_buf);
+
+	memset(iv, 0, 16);
+}
+
+/*!
+ * AES 128bit CBC mode encryption
+ *
+ * @param ct                 Byte arrary of ciphertext
+ * @param pt			Byte arrary of plaintext
+ * @param pt_len		Length of plaintext          
+ * @param k				Sercet message from KP-ABE
+ * @return			        size of ciphertext
+ */
+
+size_t
+aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
+{
+	unsigned char iv[16];
+
+	mbedtls_aes_context ctx;
+	mbedtls_aes_init(&ctx);
+	init_aes(&ctx, k, 1, iv);
+
+	/* TODO make less crufty */
+
+	/* stuff in real length (big endian) before padding */
+	size_t pt_final_len = 4 + pt_len;
+	pt_final_len += (16 - ((int) pt_final_len % 16));
+	unsigned char *pt_final = calloc(pt_final_len, sizeof(char));
+	
+	pt_final[0] = (pt_len & 0xff000000)>>24;
+	pt_final[1] = (pt_len & 0xff0000)>>16;
+	pt_final[2] = (pt_len & 0xff00)>>8;
+	pt_final[3] = (pt_len & 0xff)>>0;
+
+	memcpy(pt_final + 4, pt, pt_len);
+	
+	*ct = malloc(pt_final_len);
+	mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, pt_final_len, iv,
+			      (unsigned char*) pt_final,
+			      (unsigned char*) *ct);
+	
+	free(pt_final);
+	mbedtls_aes_free(&ctx);
+	
+	return pt_final_len;
+}
+
+/*!
+ * AES 128bit CBC mode decryption
+ *
+ * @param pt			GByteArrary of ciphertext
+ * @param k				Sercet message from KP-ABE
+ * @return				GByteArray of plaintext
+ */
+
+size_t
+aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
+{
+	unsigned char iv[16];
+	unsigned int len;
+
+	mbedtls_aes_context ctx;
+	mbedtls_aes_init(&ctx);
+	init_aes(&ctx, k, 1, iv);
+
+	unsigned char* pt_final = malloc(ct_len);
+
+	if(mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, ct_len, iv,
+			      (unsigned char*) ct,
+				 pt_final) == MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH)		
+		return 0;
+
+	/* TODO make less crufty */
+
+	/* get real length */
+	len = 0;
+	len = len
+	    | ((pt_final[0])<<24) | ((pt_final[1])<<16)
+	    | ((pt_final[2])<<8)  | ((pt_final[3])<<0);
+	
+	/* truncate any garbage from the padding */
+	*pt = malloc(len);
+	memcpy(*pt, pt_final + 4, len); 
+
+	free(pt_final);
+	return len;
+}
+
+/*!
+ * Serialize a 32 bit unsign integer to a GByteArray.
+ *
+ * @param b                                   resulting byte array
+ * @param k					Unsign integer
+ * @return					
+ */
+
+void
+serialize_uint32( char** b, uint32_t k )
+{
+        *b = malloc(4);
+	
 	int i;
-	guint8 byte;
+	uint8_t byte;
 
 	for( i = 3; i >= 0; i-- )
 	{
 		byte = (k & 0xff<<(i*8))>>(i*8);
-		g_byte_array_append(b, &byte, 1);
+		(*b)[3-i] = byte;
 	}
 }
 
 /*!
- * Unserialize a 32 bit unsign integer from a GByteArray.
+ * Unserialize a 32 bit unsign integer from a byte array.
  *
- * @param b					GByteArray.
- * @param offset			offset of the integer
+ * @param b					byte array
+ * @param offset			        offset of the integer
  * @return					Unsign integer
  */
 
 uint32_t
-unserialize_uint32( GByteArray* b, int* offset )
+unserialize_uint32( char* b, int* offset )
 {
 	int i;
 	uint32_t r;
 
 	r = 0;
 	for( i = 3; i >= 0; i-- )
-		r |= (b->data[(*offset)++])<<(i*8);
+		r |= (b[(*offset)++])<<(i*8);
 
 	return r;
 }
@@ -75,37 +192,43 @@ unserialize_uint32( GByteArray* b, int* offset )
 /*!
  * Serialize a PBC element_t to a GByteArray.
  *
- * @param b					GByteArray.
+ * @param b                                   resulting byte array
  * @param e					element_t data type
- * @return					None
+ * @return					size of b
  */
 
-void
-serialize_element( GByteArray* b, element_t e )
+size_t
+serialize_element( char** b, element_t e )
 {
 	uint32_t len;
-	unsigned char* buf;
 
 	len = element_length_in_bytes(e);
-	serialize_uint32(b, len);
+	*b = malloc(4 + len);
 
-	buf = (unsigned char*) malloc(len);
-	element_to_bytes(buf, e);
-	g_byte_array_append(b, buf, len);
-	free(buf);
+	char *buf1 = NULL;
+	serialize_uint32(&buf1, len);
+	memcpy(*b, buf1, 4);
+	free(buf1);
+
+	unsigned char* buf2 = (unsigned char*) malloc(len);
+	element_to_bytes(buf2, e);
+	memcpy(*b + 4, buf2, len);
+	free(buf2);
+	
+	return 4+len;
 }
 
 /*!
  * Unserialize a 32 PBC element_t from a GByteArray.
  *
- * @param b					GByteArray.
- * @param offset			offset of element_t within GByteArray
+ * @param b				        Byte array containing serialized element
+ * @param offset			        offset of element_t within 'b'
  * @param e					element_t
  * @return					None
  */
 
 void
-unserialize_element( GByteArray* b, int* offset, element_t e )
+unserialize_element( char* b, int* offset, element_t e )
 {
 	uint32_t len;
 	unsigned char* buf;
@@ -113,7 +236,7 @@ unserialize_element( GByteArray* b, int* offset, element_t e )
 	len = unserialize_uint32(b, offset);
 
 	buf = (unsigned char*) malloc(len);
-	memcpy(buf, b->data + *offset, len);
+	memcpy(buf, b + *offset, len);
 	*offset += len;
 
 	element_from_bytes(e, buf);
@@ -121,306 +244,84 @@ unserialize_element( GByteArray* b, int* offset, element_t e )
 }
 
 /*!
- * Serialize a String to a GByteArray.
- *
- * @param b					GByteArray.
- * @param s					String
- * @return					None
- */
-
-void
-serialize_string( GByteArray* b, char* s )
-{
-	g_byte_array_append(b, (unsigned char*) s, strlen(s) + 1);
-}
-
-/*!
- * Unserialize a String from a GByteArray.
- *
- * @param b					GByteArray.
- * @param offset			offset of string within GByteArray
- * @return					String
- */
-
-char*
-unserialize_string( GByteArray* b, int* offset )
-{
-	GString* s;
-	char* r;
-	char c;
-
-	s = g_string_sized_new(32);
-	while( 1 )
-	{
-		c = b->data[(*offset)++];
-		if( c && c != EOF )
-			g_string_append_c(s, c);
-		else
-			break;
-	}
-
-	r = s->str;
-	g_string_free(s, 0);
-
-	return r;
-}
-
-/*!
- * serialize a policy data structure to a GByteArray.
- *
- * @param b					GByteArray.
- * @param p					Policy data structure
- * @return					None
- */
-
-void
-serialize_policy( GByteArray* b, kpabe_policy_t* p )
-{
-	int i;
-
-	serialize_uint32(b, (uint32_t) p->k);
-
-	serialize_uint32(b, (uint32_t) p->children->len);
-	if( p->children->len == 0 )
-	{
-		serialize_string( b, p->attr);
-		serialize_element(b, p->D);
-	}
-	else
-		for( i = 0; i < p->children->len; i++ )
-			serialize_policy(b, g_ptr_array_index(p->children, i));
-}
-
-/*!
- * Unserialize a policy data structure from a GByteArray using the paring parameter
- * from the public data structure
- *
- * @param pub				Public data structure
- * @param b					GByteArray.
- * @param offset			offset of policy data structure within GByteArray
- * @return					Policy data structure
- */
-
-kpabe_policy_t*
-unserialize_policy( kpabe_pub_t* pub, GByteArray* b, int* offset )
-{
-	int i;
-	int n;
-	kpabe_policy_t* p;
-
-	p = (kpabe_policy_t*) malloc(sizeof(kpabe_policy_t));
-
-	p->k = (int) unserialize_uint32(b, offset);
-	p->attr = 0;
-	p->children = g_ptr_array_new();
-
-	n = unserialize_uint32(b, offset);
-	if( n == 0 )
-	{
-		p->attr = unserialize_string(b, offset);
-		element_init_G1(p->D,  pub->p);
-		unserialize_element(b, offset, p->D);
-	}
-	else
-		for( i = 0; i < n; i++ )
-			g_ptr_array_add(p->children, unserialize_policy(pub, b, offset));
-
-	return p;
-}
-
-/*!
- * Serialize a public key data structure to a GByteArray.
- *
- * @param pub				Public key data structure
- * @return					GByteArray
- */
-
-GByteArray*
-kpabe_pub_serialize( kpabe_pub_t* pub )
-{
-	GByteArray* b;
-	int i;
-
-	b = g_byte_array_new();
-	serialize_string(b,  pub->pairing_desc);
-	serialize_element(b, pub->g);
-	serialize_element(b, pub->Y);
-	serialize_uint32( b, pub->comps->len);
-
-	for( i = 0; i < pub->comps->len; i++ )
-	{
-		serialize_string( b, g_array_index(pub->comps, kpabe_pub_comp_t, i).attr);
-		serialize_element(b, g_array_index(pub->comps, kpabe_pub_comp_t, i).T);
-	}
-
-	return b;
-}
-
-/*!
- * Unserialize a public key data structure from a GByteArray. if free is true,
- * free the GByteArray
- *
- * @param b					GByteArray
- * @param free				Free flag
- * @return					Public key data structure
- */
-
-kpabe_pub_t*
-kpabe_pub_unserialize( GByteArray* b, int free )
-{
-	kpabe_pub_t* pub;
-	int offset;
-	int len;
-	int i;
-
-	pub = (kpabe_pub_t*) malloc(sizeof(kpabe_pub_t));
-	offset = 0;
-
-	pub->pairing_desc = unserialize_string(b, &offset);
-	pairing_init_set_buf(pub->p, pub->pairing_desc, strlen(pub->pairing_desc));
-
-	element_init_G1(pub->g,           pub->p);
-	element_init_GT(pub->Y, 		  pub->p);
-
-	unserialize_element(b, &offset, pub->g);
-	unserialize_element(b, &offset, pub->Y);
-
-	pub->comps = g_array_new(0, 1, sizeof(kpabe_pub_comp_t));
-	len = unserialize_uint32(b, &offset);
-
-	for( i = 0; i < len; i++ )
-	{
-		kpabe_pub_comp_t c;
-
-		c.attr = unserialize_string(b, &offset);
-
-		element_init_G1(c.T,  pub->p);
-
-		unserialize_element(b, &offset, c.T);
-
-		g_array_append_val(pub->comps, c);
-	}
-
-	if( free )
-		g_byte_array_free(b, 1);
-
-	return pub;
-}
-
-/*!
- * Serialize a master key data structure to a GByteArray.
- *
- * @param msk				Master key data structure
- * @return					GByteArray
- */
-
-GByteArray*
-kpabe_msk_serialize( kpabe_msk_t* msk )
-{
-	GByteArray* b;
-	int i;
-
-	b = g_byte_array_new();
-	serialize_element(b, msk->y);
-	serialize_uint32( b, msk->comps->len);
-
-	for( i = 0; i < msk->comps->len; i++ )
-	{
-		serialize_string( b, g_array_index(msk->comps, kpabe_msk_comp_t, i).attr);
-		serialize_element(b, g_array_index(msk->comps, kpabe_msk_comp_t, i).t);
-	}
-
-	return b;
-}
-
-/*!
- * Unserialize a master key data structure from a GByteArray. if free is true,
- * free the GByteArray
- *
- * @param pub				Public key data structure
- * @param b					GByteArray
- * @param free				Free flag
- * @return					Master key data structure
- */
-
-kpabe_msk_t*
-kpabe_msk_unserialize( kpabe_pub_t* pub, GByteArray* b, int free )
-{
-	kpabe_msk_t* msk;
-	int offset;
-	int len;
-	int i;
-
-	msk = (kpabe_msk_t*) malloc(sizeof(kpabe_msk_t));
-	offset = 0;
-
-	element_init_Zr(msk->y, pub->p);
-	unserialize_element(b, &offset, msk->y);
-
-	msk->comps = g_array_new(0, 1, sizeof(kpabe_msk_comp_t));
-	len = unserialize_uint32(b, &offset);
-
-	for( i = 0; i < len; i++ )
-	{
-		kpabe_msk_comp_t c;
-
-		c.attr = unserialize_string(b, &offset);
-
-		element_init_Zr(c.t,  pub->p);
-
-		unserialize_element(b, &offset, c.t);
-
-		g_array_append_val(msk->comps, c);
-	}
-
-	if( free )
-		g_byte_array_free(b, 1);
-
-	return msk;
-}
-
-/*!
  * Serialize a ciphertext key data structure to a GByteArray.
  *
+ * @param b                                   Will contain resulting byte array
  * @param cph				Ciphertext data structure
- * @return					GByteArray
+ * @return					Size of resulting byte arrray
  */
 
-GByteArray*
-kpabe_cph_serialize( kpabe_cph_t* cph )
+size_t
+kpabe_cph_serialize( char** b, kpabe_cph_t* cph )
 {
-	GByteArray* b;
 	int i;
+	size_t final_len = 0;
 
-	b = g_byte_array_new();
-	serialize_element(b, cph->Ep);
-	serialize_uint32( b, cph->comps->len);
+	char *buf1 = NULL;
+	size_t buf1_len;
+        buf1_len = serialize_element(&buf1, cph->Ep);
+	final_len += buf1_len;
 
-	for( i = 0; i < cph->comps->len; i++ )
+	char* buf2  = NULL;
+        serialize_uint32(&buf2, cph->comps_len);
+	final_len += 4;
+
+	char* buf3[cph->comps_len];
+	size_t buf3_len[cph->comps_len];
+
+	char* buf4[cph->comps_len];
+	size_t buf4_len[cph->comps_len];
+
+	for( i = 0; i < cph->comps_len; i++ )
 	{
-		serialize_string( b, g_array_index(cph->comps, kpabe_cph_comp_t, i).attr);
-		serialize_element(b, g_array_index(cph->comps, kpabe_cph_comp_t, i).E);
+		buf3_len[i] = strlen(cph->comps[i].attr)+1;
+		buf3[i] = malloc(buf3_len[i]);
+		strcpy(buf3[i], cph->comps[i].attr);
+		final_len += buf3_len[i];
+
+		buf4_len[i] = serialize_element(&buf4[i] , cph->comps[i].E);
+		final_len += buf4_len[i];
 	}
 
-	return b;
+	*b = malloc(final_len);
+	size_t a = 0;
+
+	memcpy(*b, buf1, buf1_len);
+	a += buf1_len;
+	free(buf1);
+
+	memcpy(*b + a, buf2, 4);
+	a += 4;
+	free(buf2);
+
+	for( i = 0; i < cph->comps_len; i++ )
+	{
+		memcpy(*b + a, buf3[i], buf3_len[i]);
+		a += buf3_len[i];
+		free(buf3[i]);
+
+		memcpy(*b + a, buf4[i], buf4_len[i]);
+		a += buf4_len[i];
+		free(buf4[i]);		
+	}	
+
+	return final_len;
 }
 
 /*!
  * Unserialize a ciphertext data structure from a GByteArray. if free is true,
- * free the GByteArray
+ * free the byte array
  *
  * @param pub				Public key data structure
- * @param b					GByteArray
- * @param free				Free flag
+ * @param b					Byte array containing data structure serialized
  * @return					Ciphertext key data structure
  */
 
 kpabe_cph_t*
-kpabe_cph_unserialize( kpabe_pub_t* pub, GByteArray* b, int free )
+kpabe_cph_unserialize( kpabe_pub_t* pub, char* b )
 {
 	kpabe_cph_t* cph;
 	int i;
-	int len;
 	int offset;
 
 	cph = (kpabe_cph_t*) malloc(sizeof(kpabe_cph_t));
@@ -429,67 +330,25 @@ kpabe_cph_unserialize( kpabe_pub_t* pub, GByteArray* b, int free )
 	element_init_GT(cph->Ep, pub->p);
 	unserialize_element(b, &offset, cph->Ep);
 
-	cph->comps = g_array_new(0, 1, sizeof(kpabe_cph_comp_t));
-	len = unserialize_uint32(b, &offset);
+	cph->comps_len = unserialize_uint32(b, &offset);
+	cph->comps = malloc(cph->comps_len*sizeof(kpabe_cph_comp_t));
 
-	for( i = 0; i < len; i++ )
+	for( i = 0; i < cph->comps_len; i++ )
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = unserialize_string(b, &offset);
+		c.attr = malloc(strlen(b + offset) + 1);
+		strcpy(c.attr, b + offset);
+		offset += strlen(c.attr)+1;
 
 		element_init_G1(c.E,  pub->p);
 
 		unserialize_element(b, &offset, c.E);
 
-		g_array_append_val(cph->comps, c);
+		memcpy(&cph->comps[i], &c, sizeof(kpabe_cph_comp_t));
 	}
 
 	return cph;
-}
-
-/*!
- * Serialize a private key data structure to a GByteArray.
- *
- * @param prv				Private key data structure
- * @return					GByteArray
- */
-
-GByteArray*
-kpabe_prv_serialize( kpabe_prv_t* prv )
-{
-	GByteArray* b;
-
-	b = g_byte_array_new();
-	serialize_policy( b, prv->p);
-
-	return b;
-}
-
-/*!
- * Unserialize a ciphertext data structure from a GByteArray. if free is true,
- * free the GByteArray
- *
- * @param b					GByteArray
- * @param free				Free flag
- * @return					Private key data structure
- */
-
-kpabe_prv_t*
-kpabe_prv_unserialize( kpabe_pub_t* pub, GByteArray* b, int free )
-{
-	kpabe_prv_t* prv;
-	int offset;
-
-	prv = (kpabe_prv_t*) malloc(sizeof(kpabe_prv_t));
-	offset = 0;
-
-	prv->p = unserialize_policy(pub, b, &offset);
-
-	if( free )
-		g_byte_array_free(b, 1);
-
-	return prv;
 }
 
 /*!
@@ -500,7 +359,7 @@ kpabe_prv_unserialize( kpabe_pub_t* pub, GByteArray* b, int free )
  */
 
 void
-kpabe_policy_free( kpabe_policy_t* p )
+kpabe_policy_free( kpabe_policy_t* p ) /* DONE! Da verificare */
 {
 	int i;
 
@@ -510,10 +369,10 @@ kpabe_policy_free( kpabe_policy_t* p )
 		element_clear(p->D);
 	}
 
-	for( i = 0; i < p->children->len; i++ )
-		kpabe_policy_free(g_ptr_array_index(p->children, i));
+	for( i = 0; i < p->children_len; i++ )
+		kpabe_policy_free(p->children[i]);
 
-	g_ptr_array_free(p->children, 1);
+	free(p->children);
 
 	free(p);
 }
@@ -526,7 +385,7 @@ kpabe_policy_free( kpabe_policy_t* p )
  */
 
 void
-kpabe_pub_free( kpabe_pub_t* pub )
+kpabe_pub_free( kpabe_pub_t* pub ) /* DONE! Da verificare */
 {
 	int i;
 
@@ -535,15 +394,15 @@ kpabe_pub_free( kpabe_pub_t* pub )
 	pairing_clear(pub->p);
 	free(pub->pairing_desc);
 
-	for( i = 0; i < pub->comps->len; i++ )
+	for( i = 0; i < pub->comps_len; i++ )
 	{
 		kpabe_pub_comp_t c;
 
-		c = g_array_index(pub->comps, kpabe_pub_comp_t, i);
+		c = pub->comps[i];
 		c.attr = NULL;
 		element_clear(c.T);
 	}
-	g_array_free(pub->comps, 1);
+	free(pub->comps);
 
 	free(pub);
 }
@@ -556,21 +415,21 @@ kpabe_pub_free( kpabe_pub_t* pub )
  */
 
 void
-kpabe_msk_free( kpabe_msk_t* msk )
+kpabe_msk_free( kpabe_msk_t* msk ) /* DONE! Da verificare */
 {
 	int i;
 
 	element_clear(msk->y);
 
-	for( i = 0; i < msk->comps->len; i++ )
+	for( i = 0; i < msk->comps_len; i++ )
 	{
 		kpabe_msk_comp_t c;
 
-		c = g_array_index(msk->comps, kpabe_msk_comp_t, i);
+		c = msk->comps[i];
 		c.attr = NULL;
 		element_clear(c.t);
 	}
-	g_array_free(msk->comps, 1);
+	free(msk->comps);
 
 	free(msk);
 }
@@ -596,22 +455,22 @@ kpabe_prv_free( kpabe_prv_t* prv )
  */
 
 void
-kpabe_cph_free( kpabe_cph_t* cph )
+kpabe_cph_free( kpabe_cph_t* cph ) /* DONE! Da verificare */
 {
 	int i;
 
 	element_clear(cph->Ep);
 
 
-	for( i = 0; i < cph->comps->len; i++ )
+	for( i = 0; i < cph->comps_len; i++ )
 	{
 		kpabe_cph_comp_t c;
 
-		c = g_array_index(cph->comps, kpabe_cph_comp_t, i);
+		c = cph->comps[i];
 		c.attr = NULL;
 		element_clear(c.E);
 	}
-	g_array_free(cph->comps, 1);
+	free(cph->comps);
 
 	free(cph);
 }

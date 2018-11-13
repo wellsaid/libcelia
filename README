@@ -10,3 +10,11 @@ following page:
 
 Email Yao Zheng <zhengyao@wpi.edu> with any questions, comments, 
 or bug reports.
+
+------------------ B.Girgenti: ESP32 Port
+Forked to be ported to ESP32 by:
+    - removing any usage of GLib
+    - substitute openssl/aes.h functions with mbedtls/aes.h ones
+    
+TODO:
+    - Check for mbedtls in configure.ac

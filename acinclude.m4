@@ -62,6 +62,10 @@ particular version with
 
 See ./configure --help for more information.
 ])
+      ],
+      [
+	AC_MSG_RESULT(cross-compiling)
+	AC_MSG_WARN([cannot run test program while cross compiling... assuming ok!])
       ])
   ],
   [

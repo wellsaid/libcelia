@@ -109,10 +109,10 @@ raise_error(char* fmt, ...)
  * @param msk			Pointer to the master key data structure
  * @param attributes	Attributes list
  * @param num_attributes  The number of attributes in the list
- * @return				none.
+ * @return				0 on error 1 on success
  */
 
-void
+int
 kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes )
 {
 	element_t tmp;	/* G_1 */
@@ -124,7 +124,9 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	*msk = malloc(sizeof(kpabe_msk_t));
 
 	(*pub)->pairing_desc = strdup(TYPE_A_PARAMS);
-	pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc));
+	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
+		return 0;
+	}
 
 	element_init_G1((*pub)->g,           (*pub)->p);
 	element_init_G1(tmp,         		 (*pub)->p);
@@ -164,6 +166,7 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 		(*msk)->comps_len++;
 	}
 
+	return 1;
 }
 
 /*!

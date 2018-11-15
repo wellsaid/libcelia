@@ -581,7 +581,7 @@ kpabe_keygen( kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
  */
 
 int
-check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da verificare */
+check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 {
 	int i, l;
 
@@ -643,7 +643,7 @@ check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da v
 
 kpabe_policy_t* cur_comp_pol;
 int
-cmp_int( const void* a, const void* b ) /* DONE! Da verificare */
+cmp_int( const void* a, const void* b )
 {
 	int k, l;
 
@@ -664,7 +664,7 @@ cmp_int( const void* a, const void* b ) /* DONE! Da verificare */
  */
 
 void
-pick_sat_min_leaves( kpabe_policy_t* p ) /* DONE! Da verificare */
+pick_sat_min_leaves( kpabe_policy_t* p )
 {
 	int i, k, l = 0;
 	int* c;
@@ -708,6 +708,8 @@ pick_sat_min_leaves( kpabe_policy_t* p ) /* DONE! Da verificare */
 				p->satl[p->satl_len++] = k;
 			}
 		assert(l == p->k);
+
+		free(c);
 	}
 }
 
@@ -722,7 +724,7 @@ pick_sat_min_leaves( kpabe_policy_t* p ) /* DONE! Da verificare */
  */
 
 void
-lagrange_coef( element_t r, int* s, size_t s_len, int i ) /* DONE! Da verificare */
+lagrange_coef( element_t r, int* s, size_t s_len, int i )
 {
 	int j, k;
 	element_t t;
@@ -758,7 +760,7 @@ lagrange_coef( element_t r, int* s, size_t s_len, int i ) /* DONE! Da verificare
 
 void
 dec_leaf_flatten( element_t r, element_t exp,
-									kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da verificare */
+									kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 {
 	kpabe_cph_comp_t* c;
 	element_t s;
@@ -790,7 +792,7 @@ void dec_node_flatten( element_t r, element_t exp,
 
 void
 dec_internal_flatten( element_t r, element_t exp,
-											kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub ) /* DONE! Da verificare */
+											kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 {
 	int i;
 	element_t t;

@@ -85,7 +85,7 @@ struct kpabe_policy_t
 	int k;            /* one if leaf, otherwise threshold */
 	char* attr;       /* attribute string if leaf, otherwise null */
 	element_t D;      /* G_1, only for leaves */
-	kpabe_policy_t** children; /* pointers to kpabe_policy_t's, NULL for leaves */
+	kpabe_policy_t* children; /* pointers to kpabe_policy_t's, NULL for leaves */
 	size_t children_len;
 
 	/* only used during encryption */

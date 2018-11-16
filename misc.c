@@ -356,22 +356,25 @@ kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b )
  */
 
 void
-kpabe_policy_free( kpabe_policy_t* p ) /* DONE! Da verificare */
+kpabe_policy_free( kpabe_policy_t* p )
 {
 	int i;
-
+	
 	if( p->attr )
 	{
 		free(p->attr);
 		element_clear(p->D);
 	}
-
+	
 	for( i = 0; i < p->children_len; i++ )
-		kpabe_policy_free(p->children[i]);
+	{
+		kpabe_policy_free(p->children + i);
+	}
 
-	free(p->children);
-
-	free(p);
+	if(p->children_len > 0){
+		free(p->children);
+		free(p);
+	}
 }
 
 /*!
@@ -382,7 +385,7 @@ kpabe_policy_free( kpabe_policy_t* p ) /* DONE! Da verificare */
  */
 
 void
-kpabe_pub_free( kpabe_pub_t* pub ) /* DONE! Da verificare */
+kpabe_pub_free( kpabe_pub_t* pub )
 {
 	int i;
 
@@ -412,7 +415,7 @@ kpabe_pub_free( kpabe_pub_t* pub ) /* DONE! Da verificare */
  */
 
 void
-kpabe_msk_free( kpabe_msk_t* msk ) /* DONE! Da verificare */
+kpabe_msk_free( kpabe_msk_t* msk )
 {
 	int i;
 
@@ -452,7 +455,7 @@ kpabe_prv_free( kpabe_prv_t* prv )
  */
 
 void
-kpabe_cph_free( kpabe_cph_t* cph ) /* DONE! Da verificare */
+kpabe_cph_free( kpabe_cph_t* cph )
 {
 	int i;
 

@@ -122,8 +122,8 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 
 	/* initialize */
 
-	*pub = malloc(sizeof(kpabe_pub_t));
-	*msk = malloc(sizeof(kpabe_msk_t));
+	*pub = heap_caps_malloc(sizeof(kpabe_pub_t), MALLOC_CAP_32BIT);
+	*msk = heap_caps_malloc(sizeof(kpabe_msk_t), MALLOC_CAP_32BIT);
 
 	(*pub)->pairing_desc = strdup(TYPE_A_PARAMS);
 	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
@@ -135,9 +135,9 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	element_init_GT((*pub)->Y,			 (*pub)->p);
 	element_init_Zr((*msk)->y,			 (*pub)->p);
 
-	(*pub)->comps = malloc(num_attributes*sizeof(kpabe_pub_comp_t));
+	(*pub)->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_pub_comp_t), MALLOC_CAP_32BIT);
 	(*pub)->comps_len = 0;
-	(*msk)->comps = malloc(num_attributes*sizeof(kpabe_msk_comp_t));
+	(*msk)->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_msk_comp_t), MALLOC_CAP_32BIT);
 	(*msk)->comps_len = 0;
 	
 	/* compute */
@@ -153,18 +153,18 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 		kpabe_pub_comp_t TA;
 		kpabe_msk_comp_t ta;
 
-		TA.attr = attributes[i];
-		ta.attr = TA.attr;
+		TA.attr = strdup(attributes[i]);
+		ta.attr = strdup(TA.attr);
 
-		element_init_Zr(ta.t,(*pub)->p);
-		element_init_G1(TA.T,(*pub)->p);
+		element_init_Zr(ta.t, (*pub)->p);
+		element_init_G1(TA.T, (*pub)->p);
 
  		element_random(ta.t);
 		element_pow_zn(TA.T, (*pub)->g, ta.t);
 
-		(*pub)->comps[i] =  TA;
+		memcpy(&(*pub)->comps[i], &TA, sizeof(kpabe_pub_comp_t));
 		(*pub)->comps_len++;
-		(*msk)->comps[i] = ta;
+		memcpy(&(*msk)->comps[i], &ta, sizeof(kpabe_msk_comp_t));
 		(*msk)->comps_len++;
 	}
 
@@ -192,7 +192,7 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 	uint8_t byte;
 
 	/* initialize */
-	cph = malloc(sizeof(kpabe_cph_t));
+	cph = heap_caps_malloc(sizeof(kpabe_cph_t), MALLOC_CAP_32BIT);
 
 	element_init_Zr(s, pub->p);
 	element_init_GT(m_e, pub->p);
@@ -204,14 +204,14 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 	element_pow_zn(cph->Ep, pub->Y, s);
 	element_mul(cph->Ep, cph->Ep, m_e);
 
-	cph->comps = malloc(num_attributes*sizeof(kpabe_cph_comp_t));
+	cph->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_cph_comp_t), MALLOC_CAP_32BIT);
 	cph->comps_len = 0;
 
 	for( i = 0; i < num_attributes; i++)
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = attributes[i];
+		c.attr = strdup(attributes[i]);
 
 		element_init_G1(c.E, pub->p);
 
@@ -291,10 +291,10 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 
 void
 base_node( kpabe_policy_t** p, int k, char* s )
-{	
-	(*p) = (kpabe_policy_t*) malloc(sizeof(kpabe_policy_t));
+{
+	(*p) = heap_caps_malloc(sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
 	(*p)->k = k;
-	(*p)->attr = s ? strdup(s) : 0;
+	(*p)->attr = s? strdup(s) : NULL;
 	(*p)->children = NULL;
 	(*p)->children_len = 0;
 	(*p)->q = 0;
@@ -327,18 +327,22 @@ strtok_count( char* s,  const char* delim )
 int
 parse_policy_postfix( kpabe_policy_t** root, char* s )
 {
+	int i;
+	
 	char*  tok;
 	kpabe_policy_t* stack;
 	size_t stack_len = 0;
 	kpabe_policy_t* top;
 
-	stack    = malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
+	stack    = heap_caps_malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
 	top = stack;
 
-	tok = strtok(s, " ");
+	char* s_tmp = strdup(s);
+	
+	tok = strtok(s_tmp, " ");
 	while( tok )
 	{
-		int i, k, n;
+		int k, n;
 		kpabe_policy_t* node;
 		
 		if( sscanf(tok, "%dof%d", &k, &n) != 2 )
@@ -350,37 +354,34 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 		}
 		else
 		{
-
 			/* parse "kofn" operator */
-
 			if( k < 1 )
 			{
-				raise_error("error parsing \"%s\": trivially satisfied operator \"%s\"\n", s, tok);
+				raise_error("error parsing \"%s\": trivially satisfied operator \"%s\"\n", s_tmp, tok);
 				return 0;
 			}
 			else if( k > n )
 			{
-				raise_error("error parsing \"%s\": unsatisfiable operator \"%s\"\n", s, tok);
+				raise_error("error parsing \"%s\": unsatisfiable operator \"%s\"\n", s_tmp, tok);
 				return 0;
 			}
 			else if( n == 1 )
 			{
-				raise_error("error parsing \"%s\": identity operator \"%s\"\n", s, tok);
+				raise_error("error parsing \"%s\": identity operator \"%s\"\n", s_tmp, tok);
 				return 0;
 			}
 			else if( n > stack_len )
 			{
-				raise_error("error parsing \"%s\": stack underflow at \"%s\"\n", s, tok);
+				raise_error("error parsing \"%s\": stack underflow at \"%s\"\n", s_tmp, tok);
 				return 0;
 			}
 			
 			/* pop n things and fill in children */
 			base_node(&node, k, 0);
-			node->children = malloc(n*sizeof(kpabe_policy_t));
+			node->children = heap_caps_malloc(n*sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
 			for( i = n - 1; i >= 0; i-- )
 			{
-			        node->children[i] = malloc(sizeof(kpabe_policy_t));
-				memcpy(node->children[i], --top, sizeof(kpabe_policy_t));
+				memcpy(&node->children[i], --top, sizeof(kpabe_policy_t));
 				stack_len--;
 				node->children_len++;
 			}
@@ -388,28 +389,30 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 			/* push result */
 			memcpy(top++, node, sizeof(kpabe_policy_t));
 			stack_len++;
-
-			free(node);
 		}
+
+		free(node);
 
 		tok = strtok(NULL, " ");
 	}
 
 	if( stack_len > 1 )
 	{
-		raise_error("error parsing \"%s\": extra tokens left on stack\n", s);
+		raise_error("error parsing \"%s\": extra tokens left on stack\n", s_tmp);
 		return 0;
 	}
 	else if( stack_len < 1 )
 	{
-		raise_error("error parsing \"%s\": empty policy\n", s);
+		raise_error("error parsing \"%s\": empty policy\n", s_tmp);
 		return 0;
 	}
 
-	*root = malloc(sizeof(kpabe_policy_t));
-	memcpy(root, --top, sizeof(kpabe_policy_t));
-	free(stack);
+	*root = heap_caps_malloc(sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
+	memcpy(*root, --top, sizeof(kpabe_policy_t));
 
+	free(stack);
+	free(s_tmp);
+	
 	return 1;
 }
 
@@ -426,15 +429,15 @@ rand_poly( kpabe_polynomial_t** q, int deg, element_t zero_val )
 {
 	int i;
 
-	(*q) = (kpabe_polynomial_t*) malloc(sizeof(kpabe_polynomial_t));
+	(*q) = heap_caps_malloc(sizeof(kpabe_polynomial_t), MALLOC_CAP_32BIT);
 	(*q)->deg = deg;
-	(*q)->coef = (element_t*) malloc(sizeof(element_t) * (deg + 1));
+	(*q)->coef = heap_caps_malloc((deg + 1)*sizeof(element_t), MALLOC_CAP_32BIT);
 
 	for( i = 0; i < (*q)->deg + 1; i++ )
 		element_init_same_as((*q)->coef[i], zero_val);
 
 	element_set((*q)->coef[0], zero_val);
-	
+
 	for( i = 1; i < (*q)->deg + 1; i++ )
  		element_random((*q)->coef[i]);
 	
@@ -486,7 +489,7 @@ eval_poly( element_t r, kpabe_polynomial_t* q, element_t x )
  */
 
 int
-fill_policy( kpabe_policy_t** p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e )
+fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e )
 {
 	int i;
 	element_t r;
@@ -497,18 +500,18 @@ fill_policy( kpabe_policy_t** p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e
 	element_init_Zr(t, pub->p);
 	element_init_Zr(a, pub->p);
 
-	rand_poly(&(*p)->q, (*p)->k - 1, e);
+	rand_poly(&p->q, p->k - 1, e);
 
-	if( (*p)->children == NULL )
+	if( p->children == NULL )
 	{
-		element_init_G1((*p)->D,  pub->p);
+		element_init_G1(p->D,  pub->p);
 
 		for( i = 0; i < msk->comps_len; i++ )
 		{
-			if( !strcmp(msk->comps[i].attr, (*p)->attr) )
+			if( !strcmp(msk->comps[i].attr, p->attr) )
 			{
-				element_div(a, (*p)->q->coef[0], msk->comps[i].t);
-				element_pow_zn((*p)->D, pub->g, a);
+				element_div(a, p->q->coef[0], msk->comps[i].t);
+				element_pow_zn(p->D, pub->g, a);
 				break;
 			}
 			else
@@ -523,12 +526,12 @@ fill_policy( kpabe_policy_t** p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e
 		}
 	}
 	else
-	{
-		for( i = 0; i < (*p)->children_len; i++ )
+	{		
+		for( i = 0; i < p->children_len; i++ )
 		{
 			element_set_si(r, i + 1);
-			eval_poly(t, (*p)->q, r);
-			if(!fill_policy(&(*p)->children[i], pub, msk, t))
+			eval_poly(t, p->q, r);
+			if(!fill_policy(&p->children[i], pub, msk, t))
 				return 0;
 		}
 	}
@@ -552,18 +555,15 @@ int
 kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
 {
 	/* initialize */
-	printf("[kpabe_keygen 0]\n");
-	*prv = malloc(sizeof(kpabe_prv_t));
+	*prv = heap_caps_malloc(sizeof(kpabe_prv_t), MALLOC_CAP_32BIT);
+	(*prv)->p = NULL;
 
-	printf("[kpabe_keygen 1]\n");
 	parse_policy_postfix(&(*prv)->p, policy);
 
 	/* compute */
-	printf("[kpabe_keygen 2]\n");
-	if(!fill_policy(&(*prv)->p, pub, msk, msk->y))
+	if(!fill_policy((*prv)->p, pub, msk, msk->y))
 		return 0;
 
-	printf("[kpabe_keygen 3]\n");
 	return 1;
 }
 
@@ -612,14 +612,14 @@ check_sat( kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub )
 	else
 	{
 		for( i = 0; i < p->children_len; i++ )
-			if(!check_sat(p->children[i], cph, pub))
+			if(!check_sat(&p->children[i], cph, pub))
 			{
 				return 0;
 			}
 
 		l = 0;
 		for( i = 0; i < p->children_len; i++ )
-			if( ((kpabe_policy_t*) p->children[i])->satisfiable )
+			if( p->children[i].satisfiable )
 			{
 			    l++;
 			}
@@ -645,8 +645,8 @@ cmp_int( const void* a, const void* b )
 {
 	int k, l;
 
-	k = ((kpabe_policy_t*) cur_comp_pol->children[*((int*)a)])->min_leaves;
-	l = ((kpabe_policy_t*) cur_comp_pol->children[*((int*)b)])->min_leaves;
+	k = cur_comp_pol->children[*((int*)a)].min_leaves;
+	l = cur_comp_pol->children[*((int*)b)].min_leaves;
 
 	return
 		k <  l ? -1 :
@@ -674,10 +674,10 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 	else
 	{
 		for( i = 0; i < p->children_len; i++ )
-			if( ((kpabe_policy_t*) p->children[i])->satisfiable )
-				pick_sat_min_leaves(p->children[i]);
+			if( p->children[i].satisfiable )
+				pick_sat_min_leaves(&p->children[i]);
 
-		c = malloc(sizeof(int) * p->children_len);
+		c = heap_caps_malloc(sizeof(int) * p->children_len, MALLOC_CAP_32BIT);
 		for( i = 0; i < p->children_len; i++ )
 			c[i] = i;
 
@@ -687,21 +687,21 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 		/* count how many satl we need */
 		p->satl_len = 0;
 		for( i = 0; i < p->children_len && l < p->k; i++ )
-			if( ((kpabe_policy_t*) p->children[c[i]])->satisfiable )
+			if( p->children[c[i]].satisfiable )
 			{
 				p->satl_len++;
 			}
 		
-		p->satl = malloc(p->satl_len*sizeof(int));
+		p->satl = heap_caps_malloc(p->satl_len*sizeof(int), MALLOC_CAP_32BIT);
 		p->satl_len = 0;
 		p->min_leaves = 0;
 		l = 0;
 
 		for( i = 0; i < p->children_len && l < p->k; i++ )
-			if( ((kpabe_policy_t*) p->children[c[i]])->satisfiable )
+			if( p->children[c[i]].satisfiable )
 			{
 				l++;
-				p->min_leaves += ((kpabe_policy_t*) p->children[c[i]])->min_leaves;
+				p->min_leaves += p->children[c[i]].min_leaves;
 				k = c[i] + 1;
 				p->satl[p->satl_len++] = k;
 			}
@@ -803,7 +803,7 @@ dec_internal_flatten( element_t r, element_t exp,
 	{
 		lagrange_coef(t, p->satl, p->satl_len, p->satl[i]);
 		element_mul(expnew, exp, t); /* num_muls++; */
-		dec_node_flatten(r, expnew, p->children[p->satl[i] - 1], cph, pub);
+		dec_node_flatten(r, expnew, &p->children[p->satl[i] - 1], cph, pub);
 	}
 
 	element_clear(t);

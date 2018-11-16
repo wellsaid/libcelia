@@ -24,6 +24,8 @@
 #include <string.h>
 #include <assert.h>
 #include <pbc.h>
+#include <esp_heap_caps.h>
+
 #include "celia.h"
 
 /********************************************************************************
@@ -281,24 +283,21 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 /*!
  * Subroutine to fill out a single KP-ABE Policy node structure
  *
+ * @param p                           Pointer which will contain the structure
  * @param k				Threshold of this node
  * @param s				Attribute of this node (if it is the leaf node)
  * @return				Policy node data structure
  */
 
-kpabe_policy_t*
-base_node( int k, char* s )
-{
-	kpabe_policy_t* p;
-
-	p = (kpabe_policy_t*) malloc(sizeof(kpabe_policy_t));
-	p->k = k;
-	p->attr = s ? strdup(s) : 0;
-	p->children = NULL;
-	p->children_len = 0;
-	p->q = 0;
-
-	return p;
+void
+base_node( kpabe_policy_t** p, int k, char* s )
+{	
+	(*p) = (kpabe_policy_t*) malloc(sizeof(kpabe_policy_t));
+	(*p)->k = k;
+	(*p)->attr = s ? strdup(s) : 0;
+	(*p)->children = NULL;
+	(*p)->children_len = 0;
+	(*p)->q = 0;
 }
 
 /* Helper method:
@@ -321,17 +320,12 @@ strtok_count( char* s,  const char* delim )
 /*!
  * Generate a Policy tree from the input policy string.
  *
+ * @param root                      Pointer to the root of the policy
  * @param s				Policy string
  * @return				Policy root node data structure
  */
-
-/*
-	TODO convert this to use a GScanner and handle quotes and / or
-	escapes to allow attributes with whitespace or = signs in them
-*/
-
-kpabe_policy_t*
-parse_policy_postfix( char* s )
+int
+parse_policy_postfix( kpabe_policy_t** root, char* s )
 {
 	char*  tok;
 	kpabe_policy_t* stack;
@@ -345,16 +339,17 @@ parse_policy_postfix( char* s )
 	while( tok )
 	{
 		int i, k, n;
+		kpabe_policy_t* node;
 		
 		if( sscanf(tok, "%dof%d", &k, &n) != 2 )
 		{
 			/* push leaf token */
-			memcpy(top++, base_node(1, tok), sizeof(kpabe_policy_t));
+			base_node(&node, 1, tok);
+			memcpy(top++, node, sizeof(kpabe_policy_t));
 			stack_len++;
 		}
 		else
 		{
-			kpabe_policy_t* node;
 
 			/* parse "kofn" operator */
 
@@ -380,7 +375,7 @@ parse_policy_postfix( char* s )
 			}
 			
 			/* pop n things and fill in children */
-			node = base_node(k, 0);
+			base_node(&node, k, 0);
 			node->children = malloc(n*sizeof(kpabe_policy_t));
 			for( i = n - 1; i >= 0; i-- )
 			{
@@ -411,40 +406,38 @@ parse_policy_postfix( char* s )
 		return 0;
 	}
 
-	kpabe_policy_t* root = malloc(sizeof(kpabe_policy_t));
+	*root = malloc(sizeof(kpabe_policy_t));
 	memcpy(root, --top, sizeof(kpabe_policy_t));
 	free(stack);
 
-	return root;
+	return 1;
 }
 
 /*!
  * Randomly generate the Lagrange basis polynomial base on provided constant value
  *
+ * @param q                           Pointer to structure containing the lagrange basis polynomial
  * @param deg			Degree of the lagrange basis polynomial
  * @param zero_val		Constant value of the lagrange basis polynomial
  * @return				Lagrange basis polynomial data structure
  */
-
-kpabe_polynomial_t*
-rand_poly( int deg, element_t zero_val )
+void
+rand_poly( kpabe_polynomial_t** q, int deg, element_t zero_val )
 {
 	int i;
-	kpabe_polynomial_t* q;
 
-	q = (kpabe_polynomial_t*) malloc(sizeof(kpabe_polynomial_t));
-	q->deg = deg;
-	q->coef = (element_t*) malloc(sizeof(element_t) * (deg + 1));
+	(*q) = (kpabe_polynomial_t*) malloc(sizeof(kpabe_polynomial_t));
+	(*q)->deg = deg;
+	(*q)->coef = (element_t*) malloc(sizeof(element_t) * (deg + 1));
 
-	for( i = 0; i < q->deg + 1; i++ )
-		element_init_same_as(q->coef[i], zero_val);
+	for( i = 0; i < (*q)->deg + 1; i++ )
+		element_init_same_as((*q)->coef[i], zero_val);
 
-	element_set(q->coef[0], zero_val);
+	element_set((*q)->coef[0], zero_val);
 	
-	for( i = 1; i < q->deg + 1; i++ )
- 		element_random(q->coef[i]);
+	for( i = 1; i < (*q)->deg + 1; i++ )
+ 		element_random((*q)->coef[i]);
 	
-	return q;
 }
 
 /*!
@@ -493,7 +486,7 @@ eval_poly( element_t r, kpabe_polynomial_t* q, element_t x )
  */
 
 int
-fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e )
+fill_policy( kpabe_policy_t** p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e )
 {
 	int i;
 	element_t r;
@@ -504,18 +497,18 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
 	element_init_Zr(t, pub->p);
 	element_init_Zr(a, pub->p);
 
-	p->q = rand_poly(p->k - 1, e);
+	rand_poly(&(*p)->q, (*p)->k - 1, e);
 
-	if( p->children == NULL )
+	if( (*p)->children == NULL )
 	{
-		element_init_G1(p->D,  pub->p);
+		element_init_G1((*p)->D,  pub->p);
 
 		for( i = 0; i < msk->comps_len; i++ )
 		{
-			if( !strcmp(msk->comps[i].attr, p->attr) )
+			if( !strcmp(msk->comps[i].attr, (*p)->attr) )
 			{
-				element_div(a, p->q->coef[0], msk->comps[i].t);
-				element_pow_zn(p->D, pub->g, a);
+				element_div(a, (*p)->q->coef[0], msk->comps[i].t);
+				element_pow_zn((*p)->D, pub->g, a);
 				break;
 			}
 			else
@@ -531,11 +524,11 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
 	}
 	else
 	{
-		for( i = 0; i < p->children_len; i++ )
+		for( i = 0; i < (*p)->children_len; i++ )
 		{
 			element_set_si(r, i + 1);
-			eval_poly(t, p->q, r);
-			if(!fill_policy(p->children[i], pub, msk, t))
+			eval_poly(t, (*p)->q, r);
+			if(!fill_policy(&(*p)->children[i], pub, msk, t))
 				return 0;
 		}
 	}
@@ -549,27 +542,29 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
 /*!
  * Generate private key with the provided policy.
  *
+ * @param prv                       Pointer to structure which contain the private key
  * @param pub			Public key data structure
  * @param msk			Master key data structure
  * @param policy		Policy tree string
  * @return				Private key data structure.
  */
-
-kpabe_prv_t*
-kpabe_keygen( kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
+int
+kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
 {
-	kpabe_prv_t* prv;
-
 	/* initialize */
-	prv = malloc(sizeof(kpabe_prv_t));
+	printf("[kpabe_keygen 0]\n");
+	*prv = malloc(sizeof(kpabe_prv_t));
 
-	prv->p = parse_policy_postfix(policy);
+	printf("[kpabe_keygen 1]\n");
+	parse_policy_postfix(&(*prv)->p, policy);
 
 	/* compute */
-	if(!fill_policy(prv->p, pub, msk, msk->y))
+	printf("[kpabe_keygen 2]\n");
+	if(!fill_policy(&(*prv)->p, pub, msk, msk->y))
 		return 0;
-	
-	return prv;
+
+	printf("[kpabe_keygen 3]\n");
+	return 1;
 }
 
 /*!
@@ -914,7 +909,7 @@ kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
 	element_init_GT(m_e, pub->p);
 	element_init_GT(Ys, pub->p);
 
-	cph = kpabe_cph_unserialize(pub, cph_buf);
+	kpabe_cph_unserialize(&cph, pub, cph_buf);
 	
 	if(!check_sat(prv->p,  cph, pub))
 		return 0;

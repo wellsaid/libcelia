@@ -317,23 +317,22 @@ kpabe_cph_serialize( char** b, kpabe_cph_t* cph )
  * @return					Ciphertext key data structure
  */
 
-kpabe_cph_t*
-kpabe_cph_unserialize( kpabe_pub_t* pub, char* b )
+void
+kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b )
 {
-	kpabe_cph_t* cph;
 	int i;
 	int offset;
 
-	cph = (kpabe_cph_t*) malloc(sizeof(kpabe_cph_t));
+	(*cph) = (kpabe_cph_t*) malloc(sizeof(kpabe_cph_t));
 	offset = 0;
 
-	element_init_GT(cph->Ep, pub->p);
-	unserialize_element(b, &offset, cph->Ep);
+	element_init_GT((*cph)->Ep, pub->p);
+	unserialize_element(b, &offset, (*cph)->Ep);
 
-	cph->comps_len = unserialize_uint32(b, &offset);
-	cph->comps = malloc(cph->comps_len*sizeof(kpabe_cph_comp_t));
+	(*cph)->comps_len = unserialize_uint32(b, &offset);
+	(*cph)->comps = malloc((*cph)->comps_len*sizeof(kpabe_cph_comp_t));
 
-	for( i = 0; i < cph->comps_len; i++ )
+	for( i = 0; i < (*cph)->comps_len; i++ )
 	{
 		kpabe_cph_comp_t c;
 
@@ -345,10 +344,8 @@ kpabe_cph_unserialize( kpabe_pub_t* pub, char* b )
 
 		unserialize_element(b, &offset, c.E);
 
-		memcpy(&cph->comps[i], &c, sizeof(kpabe_cph_comp_t));
+		memcpy(&(*cph)->comps[i], &c, sizeof(kpabe_cph_comp_t));
 	}
-
-	return cph;
 }
 
 /*!

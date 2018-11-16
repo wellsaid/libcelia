@@ -133,7 +133,7 @@ kpabe_cph_t;
   core function
 */
 int kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes );
-kpabe_prv_t* kpabe_keygen( kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy );
+int kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy );
 size_t kpabe_enc( char** c, kpabe_pub_t* pub, char* m, size_t m_len, char** attributes, size_t num_attributes );
 size_t kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len);
 
@@ -146,7 +146,7 @@ size_t kpabe_cph_serialize( char** b, kpabe_cph_t* cph );
 /*
   Also exactly what it seems.
 */
-kpabe_cph_t* kpabe_cph_unserialize( kpabe_pub_t* pub, char* b);
+void kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b);
     
 /*
   Again, exactly what it seems.

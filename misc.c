@@ -24,6 +24,8 @@
 #include <string.h>
 #include <pbc.h>
 #include <mbedtls/aes.h>
+#include <esp_heap_caps.h>
+
 #include "celia.h"
 
 
@@ -389,20 +391,21 @@ kpabe_pub_free( kpabe_pub_t* pub )
 {
 	int i;
 
+	for( i = 0; i < pub->comps_len; i++ )
+	{
+		kpabe_pub_comp_t* c = &pub->comps[i];
+		memcpy(c, pub->comps + i, sizeof(kpabe_pub_comp_t));
+		free(c->attr);
+		c->attr = NULL;
+		element_clear(c->T);
+	}
+
+	free(pub->comps);
+	
 	element_clear(pub->g);
 	element_clear(pub->Y);
 	pairing_clear(pub->p);
 	free(pub->pairing_desc);
-
-	for( i = 0; i < pub->comps_len; i++ )
-	{
-		kpabe_pub_comp_t c;
-
-		c = pub->comps[i];
-		c.attr = NULL;
-		element_clear(c.T);
-	}
-	free(pub->comps);
 
 	free(pub);
 }
@@ -419,18 +422,17 @@ kpabe_msk_free( kpabe_msk_t* msk )
 {
 	int i;
 
-	element_clear(msk->y);
-
 	for( i = 0; i < msk->comps_len; i++ )
 	{
-		kpabe_msk_comp_t c;
-
-		c = msk->comps[i];
-		c.attr = NULL;
-		element_clear(c.t);
+		kpabe_msk_comp_t *c = &msk->comps[i];
+		free(c->attr);
+		c->attr = NULL;
+		element_clear(c->t);
 	}
 	free(msk->comps);
 
+	element_clear(msk->y);
+	
 	free(msk);
 }
 

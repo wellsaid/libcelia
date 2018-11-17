@@ -129,11 +129,11 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
 		return 0;
 	}
-
-	element_init_G1((*pub)->g,           (*pub)->p);
-	element_init_G1(tmp,         		 (*pub)->p);
-	element_init_GT((*pub)->Y,			 (*pub)->p);
-	element_init_Zr((*msk)->y,			 (*pub)->p);
+	
+	element_init_G1((*pub)->g, (*pub)->p);
+	element_init_G1(tmp, (*pub)->p);
+	element_init_GT((*pub)->Y, (*pub)->p);
+	element_init_Zr((*msk)->y, (*pub)->p);
 
 	(*pub)->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_pub_comp_t), MALLOC_CAP_32BIT);
 	(*pub)->comps_len = 0;

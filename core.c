@@ -121,8 +121,8 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	int i;
 
 	/* initialize */
-	*pub = heap_caps_malloc(sizeof(kpabe_pub_t), MALLOC_CAP_32BIT);
-	*msk = heap_caps_malloc(sizeof(kpabe_msk_t), MALLOC_CAP_32BIT);
+	*pub = malloc(sizeof(kpabe_pub_t));
+	*msk = malloc(sizeof(kpabe_msk_t));
 
 	(*pub)->pairing_desc = strdup(TYPE_A_PARAMS);
 	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
@@ -134,9 +134,9 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	element_init_GT((*pub)->Y, (*pub)->p);
 	element_init_Zr((*msk)->y, (*pub)->p);
 
-	(*pub)->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_pub_comp_t), MALLOC_CAP_32BIT);
+	(*pub)->comps = malloc(num_attributes*sizeof(kpabe_pub_comp_t));
 	(*pub)->comps_len = 0;
-	(*msk)->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_msk_comp_t), MALLOC_CAP_32BIT);
+	(*msk)->comps = malloc(num_attributes*sizeof(kpabe_msk_comp_t));
 	(*msk)->comps_len = 0;
 	
 	/* compute */
@@ -190,7 +190,7 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 	uint8_t byte;
 
 	/* initialize */
-	cph = heap_caps_malloc(sizeof(kpabe_cph_t), MALLOC_CAP_32BIT);
+	cph = malloc(sizeof(kpabe_cph_t));
 
 	element_init_Zr(s, pub->p);
 	element_init_GT(m_e, pub->p);
@@ -202,7 +202,7 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 	element_pow_zn(cph->Ep, pub->Y, s);
 	element_mul(cph->Ep, cph->Ep, m_e);
 
-	cph->comps = heap_caps_malloc(num_attributes*sizeof(kpabe_cph_comp_t), MALLOC_CAP_32BIT);
+	cph->comps = malloc(num_attributes*sizeof(kpabe_cph_comp_t));
 	cph->comps_len = 0;
 
 	for( i = 0; i < num_attributes; i++)
@@ -290,7 +290,7 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 void
 base_node( kpabe_policy_t** p, int k, char* s )
 {
-	(*p) = heap_caps_malloc(sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
+	(*p) = malloc(sizeof(kpabe_policy_t));
 	(*p)->k = k;
 	(*p)->attr = s? strdup(s) : NULL;
 	(*p)->children = NULL;
@@ -332,7 +332,7 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 	size_t stack_len = 0;
 	kpabe_policy_t* top;
 
-	stack    = heap_caps_malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
+	stack    = malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
 	top = stack;
 
 	char* s_tmp = strdup(s);
@@ -376,7 +376,7 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 			
 			/* pop n things and fill in children */
 			base_node(&node, k, 0);
-			node->children = heap_caps_malloc(n*sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
+			node->children = malloc(n*sizeof(kpabe_policy_t));
 			for( i = n - 1; i >= 0; i-- )
 			{
 				memcpy(&node->children[i], --top, sizeof(kpabe_policy_t));
@@ -405,7 +405,7 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 		return 0;
 	}
 
-	*root = heap_caps_malloc(sizeof(kpabe_policy_t), MALLOC_CAP_32BIT);
+	*root = malloc(sizeof(kpabe_policy_t));
 	memcpy(*root, --top, sizeof(kpabe_policy_t));
 
 	free(stack);
@@ -427,9 +427,9 @@ rand_poly( kpabe_polynomial_t** q, int deg, element_t zero_val )
 {
 	int i;
 
-	(*q) = heap_caps_malloc(sizeof(kpabe_polynomial_t), MALLOC_CAP_32BIT);
+	(*q) = malloc(sizeof(kpabe_polynomial_t));
 	(*q)->deg = deg;
-	(*q)->coef = heap_caps_malloc((deg + 1)*sizeof(element_t), MALLOC_CAP_32BIT);
+	(*q)->coef = malloc((deg + 1)*sizeof(element_t));
 
 	for( i = 0; i < (*q)->deg + 1; i++ )
 		element_init_same_as((*q)->coef[i], zero_val);
@@ -553,7 +553,7 @@ int
 kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
 {
 	/* initialize */
-	*prv = heap_caps_malloc(sizeof(kpabe_prv_t), MALLOC_CAP_32BIT);
+	*prv = malloc(sizeof(kpabe_prv_t));
 	(*prv)->p = NULL;
 
 	parse_policy_postfix(&(*prv)->p, policy);
@@ -675,7 +675,7 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 			if( p->children[i].satisfiable )
 				pick_sat_min_leaves(&p->children[i]);
 
-		c = heap_caps_malloc(sizeof(int) * p->children_len, MALLOC_CAP_32BIT);
+		c = malloc(sizeof(int) * p->children_len);
 		for( i = 0; i < p->children_len; i++ )
 			c[i] = i;
 
@@ -691,7 +691,7 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 				p->satl_len++;
 			}
 		
-		p->satl = heap_caps_malloc(p->satl_len*sizeof(int), MALLOC_CAP_32BIT);
+		p->satl = malloc(p->satl_len*sizeof(int));
 		p->satl_len = 0;
 		p->min_leaves = 0;
 		l = 0;

@@ -181,13 +181,74 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
  */
 
 size_t
-kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes, size_t num_attributes )
+kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes, size_t num_attributes )
+{
+	int i;
+	uint8_t byte;
+	element_t m_e;
+	kpabe_cph_t* cph = kpabe_enc( pub, m_e, attributes, num_attributes );
+	
+	char* cph_buf = NULL;
+	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
+	kpabe_cph_free(cph);
+
+	char* aes_buf = NULL;
+	size_t aes_buf_len = aes_128_cbc_encrypt(&aes_buf, m, m_len, m_e);
+	element_clear(m_e);
+
+	size_t c_len = 12 + aes_buf_len + cph_buf_len;
+	*c = malloc(c_len);
+
+	size_t a = 0;
+
+	/* write plaintext len as 32-bit big endian int */
+	for( i = 3; i >= 0; i-- )
+	{
+		byte = (m_len & 0xff<<(i*8))>>(i*8);
+		(*c)[a] = byte;
+		a++;
+	}
+
+	/* write aes_buf */
+	for( i = 3; i >= 0; i-- ){
+		byte = (aes_buf_len & 0xff<<(i*8))>>(i*8);
+		(*c)[a] = byte;
+		a++;
+	}
+	memcpy(*c + a, aes_buf, aes_buf_len);
+	a += aes_buf_len;
+
+	/* write cph_buf */
+	for( i = 3; i >= 0; i-- ){
+		byte = (cph_buf_len & 0xff<<(i*8))>>(i*8);
+		(*c)[a] = byte;
+		a++;
+	}
+	memcpy(*c + a, cph_buf, cph_buf_len);
+
+	free(cph_buf);
+	free(aes_buf);
+	
+	return c_len;
+}
+
+/*!
+ * Encrypt a secret message with the provided attributes list, return a ciphertext
+.
+ *
+ * @param pub			Public key structure
+ * @param m_e				Secret Message
+ * @param attributes	Attributes list
+ * @param num_attributes  Number of attributes
+ * @return				Ciphertext structure
+ */
+
+kpabe_cph_t*
+kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attributes )
 {
 	kpabe_cph_t* cph;
-	element_t m_e;
  	element_t s;
 	int i, j;
-	uint8_t byte;
 
 	/* initialize */
 	cph = malloc(sizeof(kpabe_cph_t));
@@ -234,48 +295,7 @@ kpabe_enc( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes
 		cph->comps_len++;
 	}
 
-	char* cph_buf = NULL;
-	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
-	kpabe_cph_free(cph);
-
-	char* aes_buf = NULL;
-	size_t aes_buf_len = aes_128_cbc_encrypt(&aes_buf, m, m_len, m_e);
-	element_clear(m_e);
-
-	size_t c_len = 12 + aes_buf_len + cph_buf_len;
-	*c = malloc(c_len);
-
-	size_t a = 0;
-
-	/* write plaintext len as 32-bit big endian int */
-	for( i = 3; i >= 0; i-- )
-	{
-		byte = (m_len & 0xff<<(i*8))>>(i*8);
-		(*c)[a] = byte;
-		a++;
-	}
-
-	/* write aes_buf */
-	for( i = 3; i >= 0; i-- ){
-		byte = (aes_buf_len & 0xff<<(i*8))>>(i*8);
-		(*c)[a] = byte;
-		a++;
-	}
-	memcpy(*c + a, aes_buf, aes_buf_len);
-	a += aes_buf_len;
-
-	/* write cph_buf */
-	for( i = 3; i >= 0; i-- ){
-		byte = (cph_buf_len & 0xff<<(i*8))>>(i*8);
-		(*c)[a] = byte;
-		a++;
-	}
-	memcpy(*c + a, cph_buf, cph_buf_len);
-
-	free(cph_buf);
-	free(aes_buf);
-	
-	return c_len;
+	return cph;
 }
 
 /*!
@@ -867,7 +887,7 @@ dec_flatten( element_t r, kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub 
  */
 
 size_t
-kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
+kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
 {
 	int i;
 	size_t a = 0;
@@ -902,12 +922,37 @@ kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
 	}
 	char* cph_buf = malloc(cph_buf_len);
 	memcpy(cph_buf, c + a, cph_buf_len);	
-	
-	element_t Ys, m_e;
+
+	element_t m_e;
+	kpabe_cph_unserialize(&cph, pub, cph_buf);
+	kpabe_dec(pub, prv, cph, m_e);
+
+	kpabe_cph_free(cph);
+
+	m_len = aes_128_cbc_decrypt(m, aes_buf, aes_buf_len, m_e);
+
+	free(aes_buf);
+	free(cph_buf);
+
+	return m_len;
+}
+
+/*!
+ * Decrypt the secret message m
+ *
+ * @param pub				Public key data structure
+ * @param prv				Private key data structure
+ * @param cph				Ciphertext data structure
+ * @param m_e					Secret message
+ * @return int				Successfully decrypt or not
+ */
+
+int
+kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m_e )
+{
+	element_t Ys;
 	element_init_GT(m_e, pub->p);
 	element_init_GT(Ys, pub->p);
-
-	kpabe_cph_unserialize(&cph, pub, cph_buf);
 	
 	if(!check_sat(prv->p,  cph, pub))
 		return 0;
@@ -921,12 +966,5 @@ kpabe_dec( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
 	dec_flatten(Ys, prv->p, cph, pub);
 	element_div(m_e, cph->Ep, Ys);
 
-	kpabe_cph_free(cph);
-
-	m_len = aes_128_cbc_decrypt(m, aes_buf, aes_buf_len, m_e);
-
-	free(aes_buf);
-	free(cph_buf);
-
-	return m_len;
+	return 1;
 }

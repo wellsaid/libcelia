@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <pbc.h>
 #include <esp_heap_caps.h>
+#include <time.h>
 
 #include "celia.h"
 
@@ -187,7 +188,8 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
 	uint8_t byte;
 	element_t m_e;
 	kpabe_cph_t* cph = kpabe_enc( pub, m_e, attributes, num_attributes );
-	
+
+	clock_t begin = clock();
 	char* cph_buf = NULL;
 	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
 	kpabe_cph_free(cph);
@@ -228,6 +230,8 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
 
 	free(cph_buf);
 	free(aes_buf);
+
+	printf("Overhead time: %f s\n", (float)(clock() - begin) / CLOCKS_PER_SEC);
 	
 	return c_len;
 }

@@ -38,12 +38,13 @@
  *
  * @param ctx                        Pointer to the aes context
  * @param k				Sercet message from KP-ABE
+ * @param enc                       1 if we have to encrypt, 0 otherwise
  * @param iv			        Salt
  * @return				None
  */
 
 void
-init_aes( mbedtls_aes_context* ctx, element_t k, unsigned char* iv )
+init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 {
 	int key_len;
 	unsigned char* key_buf;
@@ -52,7 +53,10 @@ init_aes( mbedtls_aes_context* ctx, element_t k, unsigned char* iv )
 	key_buf = (unsigned char*) malloc(key_len);
 	element_to_bytes(key_buf, k);
 
-	mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
+	if(enc)
+		mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
+	else
+		mbedtls_aes_setkey_dec(ctx, key_buf + 1, 128);
 	free(key_buf);
 
 	memset(iv, 0, 16);
@@ -75,7 +79,7 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 
 	mbedtls_aes_context ctx;
 	mbedtls_aes_init(&ctx);
-	init_aes(&ctx, k, iv);
+	init_aes(&ctx, k, 1, iv);
 
 	/* TODO make less crufty */
 
@@ -118,7 +122,7 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
 
 	mbedtls_aes_context ctx;
 	mbedtls_aes_init(&ctx);
-	init_aes(&ctx, k, iv);
+	init_aes(&ctx, k, 0, iv);
 
 	unsigned char* pt_final = malloc(ct_len);
 

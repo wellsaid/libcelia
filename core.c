@@ -231,8 +231,6 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
 	free(cph_buf);
 	free(aes_buf);
 
-	printf("Overhead time: %f s\n", (float)(clock() - begin) / CLOCKS_PER_SEC);
-	
 	return c_len;
 }
 

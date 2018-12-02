@@ -189,7 +189,6 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
 	element_t m_e;
 	kpabe_cph_t* cph = kpabe_enc( pub, m_e, attributes, num_attributes );
 
-	clock_t begin = clock();
 	char* cph_buf = NULL;
 	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
 	kpabe_cph_free(cph);

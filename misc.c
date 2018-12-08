@@ -361,22 +361,20 @@ void
 kpabe_policy_free( kpabe_policy_t* p )
 {
 	int i;
-	
+
 	if( p->attr )
 	{
 		free(p->attr);
 		element_clear(p->D);
 	}
-	
+
 	for( i = 0; i < p->children_len; i++ )
 	{
 		kpabe_policy_free(p->children + i);
 	}
 
-	if(p->children_len > 0){
+	if(p->children_len > 0)
 		free(p->children);
-		free(p);
-	}
 }
 
 /*!
@@ -447,6 +445,7 @@ void
 kpabe_prv_free( kpabe_prv_t* prv )
 {
 	kpabe_policy_free(prv->p);
+	free(prv->p);
 }
 
 /*!

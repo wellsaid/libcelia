@@ -124,7 +124,8 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	*pub = malloc(sizeof(kpabe_pub_t));
 	*msk = malloc(sizeof(kpabe_msk_t));
 
-	(*pub)->pairing_desc = strdup(TYPE_A_PARAMS);
+	(*pub)->pairing_desc = malloc(strlen(TYPE_A_PARAMS)+1);
+	strcpy((*pub)->pairing_desc, TYPE_A_PARAMS);
 	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
 		return 0;
 	}
@@ -151,8 +152,10 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 		kpabe_pub_comp_t TA;
 		kpabe_msk_comp_t ta;
 
-		TA.attr = strdup(attributes[i]);
-		ta.attr = strdup(TA.attr);
+		TA.attr = malloc(strlen(attributes[i])+1);
+		strcpy(TA.attr, attributes[i]);
+		ta.attr = malloc(strlen(TA.attr)+1);
+		strcpy(ta.attr, TA.attr);
 
 		element_init_Zr(ta.t, (*pub)->p);
 		element_init_G1(TA.T, (*pub)->p);
@@ -270,7 +273,8 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attrib
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = strdup(attributes[i]);
+		c.attr = malloc(strlen(attributes[i])+1);
+		strcpy(c.attr, attributes[i]);
 
 		element_init_G1(c.E, pub->p);
 
@@ -312,8 +316,13 @@ base_node( kpabe_policy_t** p, int k, char* s )
 {
 	(*p) = malloc(sizeof(kpabe_policy_t));
 	(*p)->k = k;
-	(*p)->attr = s? strdup(s) : NULL;
-	(*p)->children = NULL;
+	if(s){
+		(*p)->attr = malloc(strlen(s)+1);
+		strcpy((*p)->attr, s);
+	} else {
+		(*p)->attr = 0;
+	}
+	(*p)->children = 0;
 	(*p)->children_len = 0;
 	(*p)->q = 0;
 }
@@ -355,7 +364,8 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 	stack    = malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
 	top = stack;
 
-	char* s_tmp = strdup(s);
+	char* s_tmp = malloc(strlen(s)+1);
+	strcpy(s_tmp,s);
 	
 	tok = strtok(s_tmp, " ");
 	while( tok )

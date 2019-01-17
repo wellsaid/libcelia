@@ -24,7 +24,6 @@
 #include <string.h>
 #include <pbc.h>
 #include <mbedtls/aes.h>
-#include <esp_heap_caps.h>
 
 #include "celia.h"
 

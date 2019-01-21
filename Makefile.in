@@ -27,7 +27,7 @@ libcelia.a: core.o misc.o
 # test: test.o libcelia.a
 # 	$(CC) -o $@ $(LDFLAGS) $^
 
-%.o: %.c *.h Makefile
+%.o: $(top_srcdir)/%.c $(top_srcdir)/*.h Makefile
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 # installation
@@ -35,18 +35,18 @@ libcelia.a: core.o misc.o
 dist: AUTHORS COPYING INSTALL NEWS README \
 	aclocal.m4 acinclude.m4 configure configure.ac Makefile.in \
 	install-sh missing mkinstalldirs \
-	core.c misc.c celia.h
+	$(top_srcdir)/core.c $(top_srcdir)/misc.c $(top_srcdir)/celia.h
 	rm -rf $(DISTNAME)
 	mkdir $(DISTNAME)
 	cp $^ $(DISTNAME)
 	tar zc $(DISTNAME) > $(DISTNAME).tar.gz
 	rm -rf $(DISTNAME)
 
-install: libcelia.a celia.h
+install: libcelia.a $(top_srcdir)/celia.h
 	$(top_srcdir)/mkinstalldirs -m 755 $(libdir)
 	$(top_srcdir)/mkinstalldirs -m 755 $(includedir)
 	$(top_srcdir)/install-sh -m 755 libcelia.a $(libdir)
-	$(top_srcdir)/install-sh -m 644 celia.h $(includedir)
+	$(top_srcdir)/install-sh -m 644 $(top_srcdir)/celia.h $(includedir)
 
 uninstall:
 	/bin/rm -f $(libdir)/libcelia.a
@@ -54,7 +54,7 @@ uninstall:
 
 # development and meta stuff
 
-TAGS: *.c *.h
+TAGS: $(top_srcdir)/*.c $(top_srcdir)/*.h
 	@(etags $^ || true) 2> /dev/null
 
 Makefile: Makefile.in config.status

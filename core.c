@@ -905,7 +905,7 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 	kpabe_cph_t* cph;
         
 	/* read plaintext len as 32-bit big endian int */
-    	size_t m_len = 0;
+    size_t m_len = 0;
 	for( i = 3; i >= 0; i-- )
 	{
 		m_len |= c[a]<<(i*8);

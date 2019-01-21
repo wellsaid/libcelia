@@ -182,12 +182,12 @@ unserialize_uint32( char* b, int* offset )
 {
 	int i;
 	uint32_t r;
+	uint8_t tmp;
 
 	r = 0;
-	for( i = 3; i >= 0; i-- )
-	{
-		printf("[unserialize_uint32 0] b[%d]=%d\n", *offset, (uint8_t) b[*offset]);
-		r |= (b[(*offset)++])<<(i*8);
+	for( i = 3; i >= 0; i-- ) {
+		tmp = b[(*offset)++];
+		r |= tmp<<(i*8);
 	}
 
 	return r;
@@ -238,10 +238,7 @@ unserialize_element( char* b, int* offset, element_t e )
 	uint32_t len;
 	unsigned char* buf;
 
-	//len = unserialize_uint32(b, offset);
-	len = 0;
-	for( i = 3; i >= 0; i-- )
-		len |= b[(*offset++)]<<(i*8);
+	len = unserialize_uint32(b, offset);
 
 	buf = (unsigned char*) malloc(len);
 	memcpy(buf, b + *offset, len);
@@ -329,28 +326,28 @@ void
 kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b )
 {
 	int i;
-	int* offset = malloc(sizeof(int));
+	int offset = 0;
 
 	(*cph) = (kpabe_cph_t*) malloc(sizeof(kpabe_cph_t));
 	offset = 0;
 
 	element_init_GT((*cph)->Ep, pub->p);
-	unserialize_element(b, offset, (*cph)->Ep);
+	unserialize_element(b, &offset, (*cph)->Ep);
 
-	(*cph)->comps_len = unserialize_uint32(b, offset);
+	(*cph)->comps_len = unserialize_uint32(b, &offset);
 	(*cph)->comps = malloc((*cph)->comps_len*sizeof(kpabe_cph_comp_t));
 
 	for( i = 0; i < (*cph)->comps_len; i++ )
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = malloc(strlen(b + *offset) + 1);
-		strcpy(c.attr, b + *offset);
+		c.attr = malloc(strlen(b + offset) + 1);
+		strcpy(c.attr, b + offset);
 		offset += strlen(c.attr)+1;
 
 		element_init_G1(c.E,  pub->p);
 
-		unserialize_element(b, offset, c.E);
+		unserialize_element(b, &offset, c.E);
 
 		memcpy(&(*cph)->comps[i], &c, sizeof(kpabe_cph_comp_t));
 	}

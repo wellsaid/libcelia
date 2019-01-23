@@ -28,6 +28,8 @@
 
 #include "celia.h"
 
+#include <os/lib/heapmem.h>
+
 /********************************************************************************
  * Goyal-Pandey-Sahai-Waters Implementation
  ********************************************************************************/
@@ -121,10 +123,10 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	int i;
 
 	/* initialize */
-	*pub = malloc(sizeof(kpabe_pub_t));
-	*msk = malloc(sizeof(kpabe_msk_t));
+	*pub = heapmem_alloc(sizeof(kpabe_pub_t));
+	*msk = heapmem_alloc(sizeof(kpabe_msk_t));
 
-	(*pub)->pairing_desc = malloc(strlen(TYPE_A_PARAMS)+1);
+	(*pub)->pairing_desc = heapmem_alloc(strlen(TYPE_A_PARAMS)+1);
 	strcpy((*pub)->pairing_desc, TYPE_A_PARAMS);
 	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
 		return 0;
@@ -135,9 +137,9 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 	element_init_GT((*pub)->Y, (*pub)->p);
 	element_init_Zr((*msk)->y, (*pub)->p);
 
-	(*pub)->comps = malloc(num_attributes*sizeof(kpabe_pub_comp_t));
+	(*pub)->comps = heapmem_alloc(num_attributes*sizeof(kpabe_pub_comp_t));
 	(*pub)->comps_len = 0;
-	(*msk)->comps = malloc(num_attributes*sizeof(kpabe_msk_comp_t));
+	(*msk)->comps = heapmem_alloc(num_attributes*sizeof(kpabe_msk_comp_t));
 	(*msk)->comps_len = 0;
 	
 	/* compute */
@@ -152,9 +154,9 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 		kpabe_pub_comp_t TA;
 		kpabe_msk_comp_t ta;
 
-		TA.attr = malloc(strlen(attributes[i])+1);
+		TA.attr = heapmem_alloc(strlen(attributes[i])+1);
 		strcpy(TA.attr, attributes[i]);
-		ta.attr = malloc(strlen(TA.attr)+1);
+		ta.attr = heapmem_alloc(strlen(TA.attr)+1);
 		strcpy(ta.attr, TA.attr);
 
 		element_init_Zr(ta.t, (*pub)->p);
@@ -200,7 +202,7 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
 	element_clear(m_e);
 
 	size_t c_len = 12 + aes_buf_len + cph_buf_len;
-	*c = malloc(c_len);
+	*c = heapmem_alloc(c_len);
 
 	size_t a = 0;
 
@@ -229,8 +231,8 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
 	}
 	memcpy(*c + a, cph_buf, cph_buf_len);
 
-	free(cph_buf);
-	free(aes_buf);
+	heapmem_free(cph_buf);
+	heapmem_free(aes_buf);
 
 	return c_len;
 }
@@ -254,7 +256,7 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attrib
 	int i, j;
 
 	/* initialize */
-	cph = malloc(sizeof(kpabe_cph_t));
+	cph = heapmem_alloc(sizeof(kpabe_cph_t));
 
 	element_init_Zr(s, pub->p);
 	element_init_GT(m_e, pub->p);
@@ -266,14 +268,14 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attrib
 	element_pow_zn(cph->Ep, pub->Y, s);
 	element_mul(cph->Ep, cph->Ep, m_e);
 
-	cph->comps = malloc(num_attributes*sizeof(kpabe_cph_comp_t));
+	cph->comps = heapmem_alloc(num_attributes*sizeof(kpabe_cph_comp_t));
 	cph->comps_len = 0;
 
 	for( i = 0; i < num_attributes; i++)
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = malloc(strlen(attributes[i])+1);
+		c.attr = heapmem_alloc(strlen(attributes[i])+1);
 		strcpy(c.attr, attributes[i]);
 
 		element_init_G1(c.E, pub->p);
@@ -314,10 +316,10 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attrib
 void
 base_node( kpabe_policy_t** p, int k, char* s )
 {
-	(*p) = malloc(sizeof(kpabe_policy_t));
+	(*p) = heapmem_alloc(sizeof(kpabe_policy_t));
 	(*p)->k = k;
 	if(s){
-		(*p)->attr = malloc(strlen(s)+1);
+		(*p)->attr = heapmem_alloc(strlen(s)+1);
 		strcpy((*p)->attr, s);
 	} else {
 		(*p)->attr = 0;
@@ -361,10 +363,10 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 	size_t stack_len = 0;
 	kpabe_policy_t* top;
 
-	stack    = malloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
+	stack    = heapmem_alloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
 	top = stack;
 
-	char* s_tmp = malloc(strlen(s)+1);
+	char* s_tmp = heapmem_alloc(strlen(s)+1);
 	strcpy(s_tmp,s);
 	
 	tok = strtok(s_tmp, " ");
@@ -406,7 +408,7 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 			
 			/* pop n things and fill in children */
 			base_node(&node, k, 0);
-			node->children = malloc(n*sizeof(kpabe_policy_t));
+			node->children = heapmem_alloc(n*sizeof(kpabe_policy_t));
 			for( i = n - 1; i >= 0; i-- )
 			{
 				memcpy(&node->children[i], --top, sizeof(kpabe_policy_t));
@@ -419,7 +421,7 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 			stack_len++;
 		}
 
-		free(node);
+		heapmem_free(node);
 
 		tok = strtok(NULL, " ");
 	}
@@ -435,11 +437,11 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 		return 0;
 	}
 
-	*root = malloc(sizeof(kpabe_policy_t));
+	*root = heapmem_alloc(sizeof(kpabe_policy_t));
 	memcpy(*root, --top, sizeof(kpabe_policy_t));
 
-	free(stack);
-	free(s_tmp);
+	heapmem_free(stack);
+	heapmem_free(s_tmp);
 	
 	return 1;
 }
@@ -457,9 +459,9 @@ rand_poly( kpabe_polynomial_t** q, int deg, element_t zero_val )
 {
 	int i;
 
-	(*q) = malloc(sizeof(kpabe_polynomial_t));
+	(*q) = heapmem_alloc(sizeof(kpabe_polynomial_t));
 	(*q)->deg = deg;
-	(*q)->coef = malloc((deg + 1)*sizeof(element_t));
+	(*q)->coef = heapmem_alloc((deg + 1)*sizeof(element_t));
 
 	for( i = 0; i < (*q)->deg + 1; i++ )
 		element_init_same_as((*q)->coef[i], zero_val);
@@ -583,7 +585,7 @@ int
 kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
 {
 	/* initialize */
-	*prv = malloc(sizeof(kpabe_prv_t));
+	*prv = heapmem_alloc(sizeof(kpabe_prv_t));
 	(*prv)->p = NULL;
 
 	parse_policy_postfix(&(*prv)->p, policy);
@@ -705,7 +707,7 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 			if( p->children[i].satisfiable )
 				pick_sat_min_leaves(&p->children[i]);
 
-		c = malloc(sizeof(int) * p->children_len);
+		c = heapmem_alloc(sizeof(int) * p->children_len);
 		for( i = 0; i < p->children_len; i++ )
 			c[i] = i;
 
@@ -721,7 +723,7 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 				p->satl_len++;
 			}
 		
-		p->satl = malloc(p->satl_len*sizeof(int));
+		p->satl = heapmem_alloc(p->satl_len*sizeof(int));
 		p->satl_len = 0;
 		p->min_leaves = 0;
 		l = 0;
@@ -735,7 +737,7 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 			}
 		assert(l == p->k);
 
-		free(c);
+		heapmem_free(c);
 	}
 }
 
@@ -919,7 +921,7 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 		aes_buf_len |= c[a]<<(i*8);
 		a++;
 	}
-	char *aes_buf = malloc(aes_buf_len);
+	char *aes_buf = heapmem_alloc(aes_buf_len);
 	memcpy(aes_buf, c + a, aes_buf_len);
 	a += aes_buf_len;
     
@@ -930,7 +932,7 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 		cph_buf_len |= c[a]<<(i*8);
 		a++;
 	}
-	char* cph_buf = malloc(cph_buf_len);
+	char* cph_buf = heapmem_alloc(cph_buf_len);
 	memcpy(cph_buf, c + a, cph_buf_len);	
 
 	element_t m_e;
@@ -941,8 +943,8 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 
 	m_len = aes_128_cbc_decrypt(m, aes_buf, aes_buf_len, m_e);
 
-	free(aes_buf);
-	free(cph_buf);
+	heapmem_free(aes_buf);
+	heapmem_free(cph_buf);
 
 	return m_len;
 }

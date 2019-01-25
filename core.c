@@ -24,7 +24,6 @@
 #include <string.h>
 #include <assert.h>
 #include <pbc.h>
-#include <esp_heap_caps.h>
 #include <time.h>
 
 #include "celia.h"

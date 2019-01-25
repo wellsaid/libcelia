@@ -903,6 +903,7 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 {
 	int i;
 	size_t a = 0;
+	uint8_t tmp;
 
 	kpabe_cph_t* cph;
         
@@ -918,7 +919,8 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 	size_t aes_buf_len = 0;
 	for( i = 3; i >= 0; i-- )
 	{
-		aes_buf_len |= c[a]<<(i*8);
+		tmp = c[a];
+		aes_buf_len |= tmp<<(i*8);
 		a++;
 	}
 	char *aes_buf = heapmem_alloc(aes_buf_len);
@@ -929,7 +931,8 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 	size_t cph_buf_len = 0;
 	for( i = 3; i >= 0; i-- )
 	{
-		cph_buf_len |= c[a]<<(i*8);
+		tmp = c[a];
+		cph_buf_len |= tmp<<(i*8);
 		a++;
 	}
 	char* cph_buf = heapmem_alloc(cph_buf_len);

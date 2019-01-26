@@ -143,6 +143,8 @@ int kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m
   Exactly what it seems.
 */
 size_t kpabe_cph_serialize( char** b, kpabe_cph_t* cph );
+size_t kpabe_pub_serialize( char** b, kpabe_pub_t* pub );
+size_t kpabe_prv_serialize( char** b, kpabe_prv_t* prv );
 
 /*
   Also exactly what it seems.

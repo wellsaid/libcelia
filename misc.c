@@ -245,6 +245,163 @@ unserialize_element( char* b, int* offset, element_t e )
 }
 
 /*!
+ * Serialize a public key data structure to a byte array.
+ *
+ * @param b					Will contain resulting byte array
+ * @param pub				Public key data structure
+ * @return						The size of the byte array
+ */
+size_t
+kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
+{
+	int i;
+	size_t final_len = 0;
+
+	char* buf1 = strdup(pub->pairing_desc);
+	size_t buf1_len = strlen(buf1) + 1;
+	final_len += buf1_len;
+	char* buf2 = NULL;
+	size_t buf2_len = serialize_element(&buf2, pub->g);
+	final_len += buf2_len;
+	char* buf3 = NULL;
+	size_t buf3_len = serialize_element(&buf3, pub->Y);
+	final_len += buf3_len;
+	char* buf4 = NULL;
+	serialize_uint32(&buf4, pub->comps_len);
+	final_len += 4;
+
+	char* buf5[pub->comps_len];
+	size_t buf5_len[pub->comps_len];
+	char* buf6[pub->comps_len];
+	size_t buf6_len[pub->comps_len];
+	for( i = 0; i < pub->comps_len; i++ )
+	{
+		buf5[i] = strdup(pub->comps[i].attr);
+		buf5_len[i] = strlen(buf5[i]) + 1;
+		buf6_len[i] = serialize_element(&buf6[i], pub->comps[i].T);
+		final_len += buf6_len[i] + buf5_len[i];
+	}
+
+	*b = malloc(final_len);
+	size_t a = 0;
+
+	memcpy(*b, buf1, buf1_len);
+	a += buf1_len;
+	free(buf1);
+
+	memcpy(*b + a, buf2, buf2_len);
+	a += buf2_len;
+	free(buf2);
+
+	memcpy(*b + a, buf3, buf3_len);
+	a += buf3_len;
+	free(buf3);
+
+	memcpy(*b + a, buf4, 4);
+	a += 4;
+	free(buf4);
+
+	for( i = 0; i < pub->comps_len; i++ )
+	{
+		memcpy(*b + a, buf5[i], buf5_len[i]);
+		a += buf5_len[i];
+		free(buf5[i]);
+
+		memcpy(*b + a, buf6[i], buf6_len[i]);
+		a += buf6_len[i];
+		free(buf6[i]);
+	}
+
+	return final_len;
+}
+
+/*!
+ * serialize a policy data structure to a byte arrat.
+ *
+ * @param b					Will contain resulting byte array
+ * @param p					Policy data structure
+ * @return						Size of byte array
+ */
+size_t
+serialize_policy( char** b, kpabe_policy_t* p )
+{
+	int i;
+	size_t final_len = 0;
+
+	char* buf1 = NULL;
+	serialize_uint32(&buf1, (uint32_t) p->k);
+	final_len += 4;
+
+	char* buf2 = NULL;
+	serialize_uint32(&buf2, (uint32_t) p->children_len);
+	final_len += 4;
+
+	char* buf4 = NULL;
+	size_t buf4_len;
+	char* buf5 = NULL;
+	size_t buf5_len;
+	char* buf6[p->children_len];
+	size_t buf6_len[p->children_len];
+	if( p->children_len == 0 )
+	{
+		buf4 = strdup(p->attr);
+		buf4_len = strlen(buf4) + 1;
+		buf5_len = serialize_element(&buf5, p->D);
+		final_len += buf4_len + buf5_len;
+	}
+	else
+		for( i = 0; i < p->children_len; i++ )
+		{
+			buf6_len[i] = serialize_policy(&buf6[i], &p->children[i]);
+			final_len += buf6_len[i];
+		}
+
+	*b = malloc(final_len);
+	size_t a = 0;
+
+	memcpy(*b, buf1, 4);
+	a += 4;
+	free(buf1);
+
+	memcpy(*b + a, buf2, 4);
+	a += 4;
+	free(buf2);
+
+	if( p->children_len == 0 )
+	{
+		memcpy(*b  + a, buf4, buf4_len);
+		a += buf4_len;
+		free(buf4);
+
+		memcpy(*b  + a, buf5, buf5_len);
+		a += buf5_len;
+		free(buf5);
+	}
+	else
+		for( i = 0; i < p->children_len; i++ )
+		{
+			memcpy(*b + a, buf6[i], buf6_len[i]);
+			a += buf6_len[i];
+			free(buf6[i]);
+		}
+
+	return final_len;
+}
+
+/*!
+ * Serialize a private key data structure to a byte array.
+ *
+ * @param b				Will contain resulting byte array
+ * @param prv			Private key data structure
+ * @return					Size of byte array
+ */
+size_t
+kpabe_prv_serialize( char** b, kpabe_prv_t* prv )
+{
+	return serialize_policy( b, prv->p );
+}
+
+/*!
  * Serialize a ciphertext key data structure to a GByteArray.
  *
  * @param b                                   Will contain resulting byte array
@@ -260,7 +417,7 @@ kpabe_cph_serialize( char** b, kpabe_cph_t* cph )
 
 	char *buf1 = NULL;
 	size_t buf1_len;
-        buf1_len = serialize_element(&buf1, cph->Ep);
+    buf1_len = serialize_element(&buf1, cph->Ep);
 	final_len += buf1_len;
 
 	char* buf2  = NULL;

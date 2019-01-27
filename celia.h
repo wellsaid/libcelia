@@ -84,7 +84,7 @@ typedef struct kpabe_policy_t kpabe_policy_t;
 struct kpabe_policy_t
 {
 	/* serialized */
-	int k;            /* one if leaf, otherwise threshold */
+	unsigned int k;            /* one if leaf, otherwise threshold */
 	char* attr;       /* attribute string if leaf, otherwise null */
 	element_t D;      /* G_1, only for leaves */
 	kpabe_policy_t* children; /* pointers to kpabe_policy_t's, NULL for leaves */
@@ -145,11 +145,16 @@ int kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m
   Exactly what it seems.
 */
 size_t kpabe_cph_serialize( char** b, kpabe_cph_t* cph );
+size_t kpabe_pub_serialize( char** b, kpabe_pub_t* pub );
+size_t kpabe_prv_serialize( char** b, kpabe_prv_t* prv );
 
 /*
   Also exactly what it seems.
 */
 void kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b);
+void kpabe_pub_unserialize( kpabe_pub_t** pub, char* b );
+void kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t* pub, char* b );
+
     
 /*
   Again, exactly what it seems.

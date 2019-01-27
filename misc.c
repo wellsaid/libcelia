@@ -237,7 +237,6 @@ serialize_element( char** b, element_t e )
 void
 unserialize_element( char* b, int* offset, element_t e )
 {
-	int i;
 	uint32_t len;
 	unsigned char* buf;
 
@@ -249,6 +248,273 @@ unserialize_element( char* b, int* offset, element_t e )
 
 	element_from_bytes(e, buf);
 	heapmem_free(buf);
+}
+
+/*!
+ * Serialize a public key data structure to a byte array.
+ *
+ * @param b					Will contain resulting byte array
+ * @param pub				Public key data structure
+ * @return						The size of the byte array
+ */
+size_t
+kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
+{
+	int i;
+	size_t final_len = 0;
+
+	char* buf1 = heapmem_alloc(strlen(pub->pairing_desc) + 1);
+	strcpy(buf1, pub->pairing_desc);
+	size_t buf1_len = strlen(buf1) + 1;
+	final_len += buf1_len;
+	char* buf2 = NULL;
+	size_t buf2_len = serialize_element(&buf2, pub->g);
+	final_len += buf2_len;
+	char* buf3 = NULL;
+	size_t buf3_len = serialize_element(&buf3, pub->Y);
+	final_len += buf3_len;
+	char* buf4 = NULL;
+	serialize_uint32(&buf4, pub->comps_len);
+	final_len += 4;
+
+	char* buf5[pub->comps_len];
+	size_t buf5_len[pub->comps_len];
+	char* buf6[pub->comps_len];
+	size_t buf6_len[pub->comps_len];
+	for( i = 0; i < pub->comps_len; i++ )
+	{
+		buf5[i] = heapmem_alloc(strlen(pub->comps[i].attr) + 1);
+		strcpy(buf5[i], pub->comps[i].attr);
+		buf5_len[i] = strlen(buf5[i]) + 1;
+		buf6_len[i] = serialize_element(&buf6[i], pub->comps[i].T);
+		final_len += buf6_len[i] + buf5_len[i];
+	}
+
+	*b = heapmem_alloc(final_len);
+	size_t a = 0;
+
+	memcpy(*b, buf1, buf1_len);
+	a += buf1_len;
+	heapmem_free(buf1);
+
+	memcpy(*b + a, buf2, buf2_len);
+	a += buf2_len;
+	heapmem_free(buf2);
+
+	memcpy(*b + a, buf3, buf3_len);
+	a += buf3_len;
+	heapmem_free(buf3);
+
+	memcpy(*b + a, buf4, 4);
+	a += 4;
+	heapmem_free(buf4);
+
+	for( i = 0; i < pub->comps_len; i++ )
+	{
+		memcpy(*b + a, buf5[i], buf5_len[i]);
+		a += buf5_len[i];
+		heapmem_free(buf5[i]);
+
+		memcpy(*b + a, buf6[i], buf6_len[i]);
+		a += buf6_len[i];
+		heapmem_free(buf6[i]);
+	}
+
+	return final_len;
+}
+
+/*!
+ * Unserialize a public key data structure from a byte array.
+ *
+ * @param pub			The public key returned
+ * @param b				The byte array
+ * @return					None
+ */
+void
+kpabe_pub_unserialize( kpabe_pub_t** pub, char* b )
+{
+	int offset;
+	int i;
+
+	*pub = (kpabe_pub_t*) heapmem_alloc(sizeof(kpabe_pub_t));
+	offset = 0;
+
+	(*pub)->pairing_desc = heapmem_alloc(strlen(b + offset) + 1);
+	strcpy((*pub)->pairing_desc, b + offset);
+	offset += strlen((*pub)->pairing_desc) + 1;
+	pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc));
+
+	element_init_G1((*pub)->g, (*pub)->p);
+	element_init_GT((*pub)->Y, (*pub)->p);
+
+	unserialize_element(b, &offset, (*pub)->g);
+	unserialize_element(b, &offset, (*pub)->Y);
+
+	(*pub)->comps_len = unserialize_uint32(b, &offset);
+	(*pub)->comps = heapmem_alloc((*pub)->comps_len*sizeof(kpabe_pub_comp_t));
+
+	for( i = 0; i < (*pub)->comps_len; i++ )
+	{
+		kpabe_pub_comp_t c;
+
+		c.attr = heapmem_alloc(strlen(b + offset) + 1);
+		strcpy(c.attr, b + offset);
+		offset += strlen(c.attr) + 1;
+
+		element_init_G1(c.T, (*pub)->p);
+
+		unserialize_element(b, &offset, c.T);
+
+		memcpy(&(*pub)->comps[i], &c, sizeof(kpabe_pub_comp_t));
+	}
+}
+
+/*!
+ * serialize a policy data structure to a byte arrat.
+ *
+ * @param b					Will contain resulting byte array
+ * @param p					Policy data structure
+ * @return						Size of byte array
+ */
+size_t
+serialize_policy( char** b, kpabe_policy_t* p )
+{
+	int i;
+	size_t final_len = 0;
+
+	char* buf1 = NULL;
+	serialize_uint32(&buf1, (uint32_t) p->k);
+	final_len += 4;
+
+	char* buf2 = NULL;
+	serialize_uint32(&buf2, (uint32_t) p->children_len);
+	final_len += 4;
+
+	char* buf4 = NULL;
+	size_t buf4_len = 0;
+	char* buf5 = NULL;
+	size_t buf5_len = 0;
+	char* buf6[p->children_len];
+	size_t buf6_len[p->children_len];
+	if( p->children_len == 0 )
+	{
+		buf4 = heapmem_alloc(strlen(p->attr) + 1);
+		strcpy(buf4, p->attr);
+		buf4_len = strlen(buf4) + 1;
+		buf5_len = serialize_element(&buf5, p->D);
+		final_len += buf4_len + buf5_len;
+	}
+	else
+		for( i = 0; i < p->children_len; i++ )
+		{
+			buf6_len[i] = serialize_policy(&buf6[i], &p->children[i]);
+			final_len += buf6_len[i];
+		}
+
+	*b = heapmem_alloc(final_len);
+	size_t a = 0;
+
+	memcpy(*b, buf1, 4);
+	a += 4;
+	heapmem_free(buf1);
+
+	memcpy(*b + a, buf2, 4);
+	a += 4;
+	heapmem_free(buf2);
+
+	if( p->children_len == 0 )
+	{
+		memcpy(*b  + a, buf4, buf4_len);
+		a += buf4_len;
+		heapmem_free(buf4);
+
+		memcpy(*b  + a, buf5, buf5_len);
+		a += buf5_len;
+		heapmem_free(buf5);
+	}
+	else
+		for( i = 0; i < p->children_len; i++ )
+		{
+			memcpy(*b + a, buf6[i], buf6_len[i]);
+			a += buf6_len[i];
+			heapmem_free(buf6[i]);
+		}
+
+	return final_len;
+}
+
+/*!
+ * Unserialize a policy data structure from a byte array using the paring parameter
+ * from the public data structure
+ *
+ * @param p				The policy returned
+ * @param pub			Public data structure
+ * @param b				The byte array
+ * @param offset	    Offset of policy data structure within GByteArray
+ * @return					None
+ */
+
+void
+unserialize_policy( kpabe_policy_t** p, kpabe_pub_t* pub, char* b, int* offset )
+{
+	int i;
+
+	if(*p == NULL)
+		*p = (kpabe_policy_t*) heapmem_alloc(sizeof(kpabe_policy_t));
+
+	(*p)->k = unserialize_uint32(b, offset);
+	(*p)->attr = 0;
+	(*p)->children_len = unserialize_uint32(b, offset);
+	(*p)->children = (kpabe_policy_t*) heapmem_alloc((*p)->children_len*sizeof(kpabe_policy_t));
+
+	if( (*p)->children_len == 0 )
+	{
+		(*p)->attr = heapmem_alloc(strlen(b + *offset) + 1);
+		strcpy((*p)->attr, b + *offset);
+		*offset += strlen((*p)->attr) + 1;
+		element_init_G1((*p)->D,  pub->p);
+		unserialize_element(b, offset, (*p)->D);
+	}
+	else
+		for( i = 0; i < (*p)->children_len; i++ )
+		{
+			kpabe_policy_t* tmp = &(*p)->children[i];
+			unserialize_policy(&tmp, pub, b, offset);
+		}
+}
+
+/*!
+ * Serialize a private key data structure to a byte array.
+ *
+ * @param b				Will contain resulting byte array
+ * @param prv			Private key data structure
+ * @return					Size of byte array
+ */
+size_t
+kpabe_prv_serialize( char** b, kpabe_prv_t* prv )
+{
+	return serialize_policy( b, prv->p );
+}
+
+/*!
+ * Unserialize a ciphertext data structure from a byte array.
+ *
+ * @param prv			The returned private key
+ * @param pub			Public parameter structure
+ * @param b				The byte array
+ * @return					None
+ */
+
+void
+kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t* pub, char* b )
+{
+	int offset;
+
+	*prv = (kpabe_prv_t*) heapmem_alloc(sizeof(kpabe_prv_t));
+	offset = 0;
+
+	(*prv)->p = NULL;
+	unserialize_policy(&(*prv)->p, pub, b, &offset);
 }
 
 /*!

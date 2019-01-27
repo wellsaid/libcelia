@@ -157,7 +157,7 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
 void
 serialize_uint32( char** b, uint32_t k )
 {
-        *b = malloc(4);
+    *b = malloc(4);
 	
 	int i;
 	uint8_t byte;
@@ -182,10 +182,13 @@ unserialize_uint32( char* b, int* offset )
 {
 	int i;
 	uint32_t r;
+	uint8_t tmp;
 
 	r = 0;
-	for( i = 3; i >= 0; i-- )
-		r |= (b[(*offset)++])<<(i*8);
+	for( i = 3; i >= 0; i-- ) {
+		tmp = b[(*offset)++];
+		r |= tmp<<(i*8);
+	}
 
 	return r;
 }
@@ -222,9 +225,9 @@ serialize_element( char** b, element_t e )
 /*!
  * Unserialize a 32 PBC element_t from a GByteArray.
  *
- * @param b				        Byte array containing serialized element
- * @param offset			        offset of element_t within 'b'
- * @param e					element_t
+ * @param b				Byte array containing serialized element
+ * @param offset	    offset of element_t within 'b'
+ * @param e				element_t
  * @return					None
  */
 
@@ -316,6 +319,50 @@ kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
 }
 
 /*!
+ * Unserialize a public key data structure from a byte array.
+ *
+ * @param pub			The public key returned
+ * @param b				The byte array
+ * @return					None
+ */
+void
+kpabe_pub_unserialize( kpabe_pub_t** pub, char* b )
+{
+	int offset;
+	int i;
+
+	*pub = (kpabe_pub_t*) malloc(sizeof(kpabe_pub_t));
+	offset = 0;
+
+	(*pub)->pairing_desc = strdup(b + offset);
+	offset += strlen((*pub)->pairing_desc) + 1;
+	pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc));
+
+	element_init_G1((*pub)->g, (*pub)->p);
+	element_init_GT((*pub)->Y, (*pub)->p);
+
+	unserialize_element(b, &offset, (*pub)->g);
+	unserialize_element(b, &offset, (*pub)->Y);
+
+	(*pub)->comps_len = unserialize_uint32(b, &offset);
+	(*pub)->comps = malloc((*pub)->comps_len*sizeof(kpabe_pub_comp_t));
+
+	for( i = 0; i < (*pub)->comps_len; i++ )
+	{
+		kpabe_pub_comp_t c;
+
+		c.attr = strdup(b + offset);
+		offset += strlen(c.attr) + 1;
+
+		element_init_G1(c.T, (*pub)->p);
+
+		unserialize_element(b, &offset, c.T);
+
+		memcpy(&(*pub)->comps[i], &c, sizeof(kpabe_pub_comp_t));
+	}
+}
+
+/*!
  * serialize a policy data structure to a byte arrat.
  *
  * @param b					Will contain resulting byte array
@@ -337,9 +384,9 @@ serialize_policy( char** b, kpabe_policy_t* p )
 	final_len += 4;
 
 	char* buf4 = NULL;
-	size_t buf4_len;
+	size_t buf4_len = 0;
 	char* buf5 = NULL;
-	size_t buf5_len;
+	size_t buf5_len = 0;
 	char* buf6[p->children_len];
 	size_t buf6_len[p->children_len];
 	if( p->children_len == 0 )
@@ -389,6 +436,45 @@ serialize_policy( char** b, kpabe_policy_t* p )
 }
 
 /*!
+ * Unserialize a policy data structure from a byte array using the paring parameter
+ * from the public data structure
+ *
+ * @param p				The policy returned
+ * @param pub			Public data structure
+ * @param b				The byte array
+ * @param offset	    Offset of policy data structure within GByteArray
+ * @return					None
+ */
+
+void
+unserialize_policy( kpabe_policy_t** p, kpabe_pub_t* pub, char* b, int* offset )
+{
+	int i;
+
+	if(*p == NULL)
+		*p = (kpabe_policy_t*) malloc(sizeof(kpabe_policy_t));
+
+	(*p)->k = unserialize_uint32(b, offset);
+	(*p)->attr = 0;
+	(*p)->children_len = unserialize_uint32(b, offset);
+	(*p)->children = (kpabe_policy_t*) malloc((*p)->children_len*sizeof(kpabe_policy_t));
+
+	if( (*p)->children_len == 0 )
+	{
+		(*p)->attr = strdup(b + *offset);
+		*offset += strlen((*p)->attr) + 1;
+		element_init_G1((*p)->D,  pub->p);
+		unserialize_element(b, offset, (*p)->D);
+	}
+	else
+		for( i = 0; i < (*p)->children_len; i++ )
+		{
+			kpabe_policy_t* tmp = &(*p)->children[i];
+			unserialize_policy(&tmp, pub, b, offset);
+		}
+}
+
+/*!
  * Serialize a private key data structure to a byte array.
  *
  * @param b				Will contain resulting byte array
@@ -399,6 +485,27 @@ size_t
 kpabe_prv_serialize( char** b, kpabe_prv_t* prv )
 {
 	return serialize_policy( b, prv->p );
+}
+
+/*!
+ * Unserialize a ciphertext data structure from a byte array.
+ *
+ * @param prv			The returned private key
+ * @param pub			Public parameter structure
+ * @param b				The byte array
+ * @return					None
+ */
+
+void
+kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t* pub, char* b )
+{
+	int offset;
+
+	*prv = (kpabe_prv_t*) malloc(sizeof(kpabe_prv_t));
+	offset = 0;
+
+	(*prv)->p = NULL;
+	unserialize_policy(&(*prv)->p, pub, b, &offset);
 }
 
 /*!

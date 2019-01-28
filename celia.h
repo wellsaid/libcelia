@@ -153,7 +153,7 @@ size_t kpabe_prv_serialize( char** b, kpabe_prv_t* prv );
 */
 void kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b);
 void kpabe_pub_unserialize( kpabe_pub_t* pub, char* b );
-void kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t pub, char* b );
+void kpabe_prv_unserialize( kpabe_prv_t* prv, kpabe_pub_t pub, char* b );
 
     
 /*

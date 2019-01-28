@@ -449,37 +449,33 @@ serialize_policy( char** b, kpabe_policy_t* p )
  * @param p				The policy returned
  * @param pub			Public data structure
  * @param b				The byte array
- * @param offset	    Offset of policy data structure within GByteArray
  * @return					None
  */
 
 void
-unserialize_policy( kpabe_policy_t** p, kpabe_pub_t pub, char* b, int* offset )
+unserialize_policy( kpabe_policy_t* p, kpabe_pub_t pub, char* b, int* offset )
 {
 	int i;
 
-	if(*p == NULL)
-		*p = (kpabe_policy_t*) heapmem_alloc(sizeof(kpabe_policy_t));
+	(*p).k = unserialize_uint32(b, offset);
+	(*p).attr = 0;
+	(*p).children_len = unserialize_uint32(b, offset);
+	(*p).children = NULL;
 
-	(*p)->k = unserialize_uint32(b, offset);
-	(*p)->attr = 0;
-	(*p)->children_len = unserialize_uint32(b, offset);
-	(*p)->children = (kpabe_policy_t*) heapmem_alloc((*p)->children_len*sizeof(kpabe_policy_t));
-
-	if( (*p)->children_len == 0 )
+	if( (*p).children_len == 0 )
 	{
-		(*p)->attr = heapmem_alloc(strlen(b + *offset) + 1);
-		strcpy((*p)->attr, b + *offset);
-		*offset += strlen((*p)->attr) + 1;
-		element_init_G1((*p)->D,  pub.p);
-		unserialize_element(b, offset, (*p)->D);
+		size_t attr_len = strlen(b + *offset) + 1;
+		(*p).attr = heapmem_alloc(attr_len);
+		strcpy((*p).attr, b + *offset);
+		*offset += attr_len;
+		element_init_G1((*p).D,  pub.p);
+		unserialize_element(b, offset, (*p).D);
 	}
-	else
-		for( i = 0; i < (*p)->children_len; i++ )
-		{
-			kpabe_policy_t* tmp = &(*p)->children[i];
-			unserialize_policy(&tmp, pub, b, offset);
-		}
+	else{
+		(*p).children = (kpabe_policy_t*) heapmem_alloc((*p).children_len*sizeof(kpabe_policy_t));
+		for( i = 0; i < (*p).children_len; i++ )
+			unserialize_policy(&(*p).children[i], pub, b, offset);
+	}
 }
 
 /*!
@@ -505,15 +501,10 @@ kpabe_prv_serialize( char** b, kpabe_prv_t* prv )
  */
 
 void
-kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t pub, char* b )
+kpabe_prv_unserialize( kpabe_prv_t* prv, kpabe_pub_t pub, char* b )
 {
-	int offset;
-
-	*prv = (kpabe_prv_t*) heapmem_alloc(sizeof(kpabe_prv_t));
-	offset = 0;
-
-	(*prv)->p = NULL;
-	unserialize_policy(&(*prv)->p, pub, b, &offset);
+	int offset = 0;
+	unserialize_policy((*prv).p, pub, b, &offset);
 }
 
 /*!

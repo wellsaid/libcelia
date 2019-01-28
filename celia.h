@@ -136,8 +136,8 @@ kpabe_cph_t;
 */
 int kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes );
 int kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy );
-size_t kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char* m, size_t m_len, char** attributes, size_t num_attributes );
-kpabe_cph_t* kpabe_enc( kpabe_pub_t* pub, element_t m, char** attributes, size_t num_attributes );
+size_t kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len );
+kpabe_cph_t* kpabe_enc( kpabe_pub_t* pub, element_t m );
 size_t kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len);
 int kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m_e );
 

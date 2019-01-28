@@ -186,12 +186,12 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
  */
 
 size_t
-kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char** attributes, size_t num_attributes )
+kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len )
 {
 	int i;
 	uint8_t byte;
 	element_t m_e;
-	kpabe_cph_t* cph = kpabe_enc( pub, m_e, attributes, num_attributes );
+	kpabe_cph_t* cph = kpabe_enc( pub, m_e );
 
 	char* cph_buf = NULL;
 	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
@@ -241,15 +241,13 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len, char**
  * Encrypt a secret message with the provided attributes list, return a ciphertext
 .
  *
- * @param pub			Public key structure
- * @param m_e				Secret Message
- * @param attributes	Attributes list
- * @param num_attributes  Number of attributes
+ * @param pub		Public key structure
+ * @param m_e		Secret Message
  * @return				Ciphertext structure
  */
 
 kpabe_cph_t*
-kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attributes )
+kpabe_enc( kpabe_pub_t* pub, element_t m_e )
 {
 	kpabe_cph_t* cph;
  	element_t s;
@@ -268,15 +266,15 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e, char** attributes, size_t num_attrib
 	element_pow_zn(cph->Ep, pub->Y, s);
 	element_mul(cph->Ep, cph->Ep, m_e);
 
-	cph->comps = heapmem_alloc(num_attributes*sizeof(kpabe_cph_comp_t));
+	cph->comps = heapmem_alloc((*pub).comps_len*sizeof(kpabe_cph_comp_t));
 	cph->comps_len = 0;
 
-	for( i = 0; i < num_attributes; i++)
+	for( i = 0; i < (*pub).comps_len; i++)
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = heapmem_alloc(strlen(attributes[i])+1);
-		strcpy(c.attr, attributes[i]);
+		c.attr = heapmem_alloc(strlen((*pub).comps[i].attr) + 1);
+		strcpy(c.attr, (*pub).comps[i].attr);
 
 		element_init_G1(c.E, pub->p);
 

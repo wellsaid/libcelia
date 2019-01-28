@@ -331,29 +331,28 @@ kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
  * @return					None
  */
 void
-kpabe_pub_unserialize( kpabe_pub_t** pub, char* b )
+kpabe_pub_unserialize( kpabe_pub_t* pub, char* b )
 {
 	int offset;
 	int i;
 
-	*pub = (kpabe_pub_t*) heapmem_alloc(sizeof(kpabe_pub_t));
 	offset = 0;
 
-	(*pub)->pairing_desc = heapmem_alloc(strlen(b + offset) + 1);
-	strcpy((*pub)->pairing_desc, b + offset);
-	offset += strlen((*pub)->pairing_desc) + 1;
-	pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc));
+	(*pub).pairing_desc = heapmem_alloc(strlen(b + offset) + 1);
+	strcpy((*pub).pairing_desc, b + offset);
+	offset += strlen((*pub).pairing_desc) + 1;
+	pairing_init_set_buf((*pub).p, (*pub).pairing_desc, strlen((*pub).pairing_desc));
 
-	element_init_G1((*pub)->g, (*pub)->p);
-	element_init_GT((*pub)->Y, (*pub)->p);
+	element_init_G1((*pub).g, (*pub).p);
+	element_init_GT((*pub).Y, (*pub).p);
 
-	unserialize_element(b, &offset, (*pub)->g);
-	unserialize_element(b, &offset, (*pub)->Y);
+	unserialize_element(b, &offset, (*pub).g);
+	unserialize_element(b, &offset, (*pub).Y);
 
-	(*pub)->comps_len = unserialize_uint32(b, &offset);
-	(*pub)->comps = heapmem_alloc((*pub)->comps_len*sizeof(kpabe_pub_comp_t));
+	(*pub).comps_len = unserialize_uint32(b, &offset);
+	(*pub).comps = heapmem_alloc((*pub).comps_len*sizeof(kpabe_pub_comp_t));
 
-	for( i = 0; i < (*pub)->comps_len; i++ )
+	for( i = 0; i < (*pub).comps_len; i++ )
 	{
 		kpabe_pub_comp_t c;
 
@@ -361,11 +360,11 @@ kpabe_pub_unserialize( kpabe_pub_t** pub, char* b )
 		strcpy(c.attr, b + offset);
 		offset += strlen(c.attr) + 1;
 
-		element_init_G1(c.T, (*pub)->p);
+		element_init_G1(c.T, (*pub).p);
 
 		unserialize_element(b, &offset, c.T);
 
-		memcpy(&(*pub)->comps[i], &c, sizeof(kpabe_pub_comp_t));
+		memcpy(&(*pub).comps[i], &c, sizeof(kpabe_pub_comp_t));
 	}
 }
 
@@ -455,7 +454,7 @@ serialize_policy( char** b, kpabe_policy_t* p )
  */
 
 void
-unserialize_policy( kpabe_policy_t** p, kpabe_pub_t* pub, char* b, int* offset )
+unserialize_policy( kpabe_policy_t** p, kpabe_pub_t pub, char* b, int* offset )
 {
 	int i;
 
@@ -472,7 +471,7 @@ unserialize_policy( kpabe_policy_t** p, kpabe_pub_t* pub, char* b, int* offset )
 		(*p)->attr = heapmem_alloc(strlen(b + *offset) + 1);
 		strcpy((*p)->attr, b + *offset);
 		*offset += strlen((*p)->attr) + 1;
-		element_init_G1((*p)->D,  pub->p);
+		element_init_G1((*p)->D,  pub.p);
 		unserialize_element(b, offset, (*p)->D);
 	}
 	else
@@ -506,7 +505,7 @@ kpabe_prv_serialize( char** b, kpabe_prv_t* prv )
  */
 
 void
-kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t* pub, char* b )
+kpabe_prv_unserialize( kpabe_prv_t** prv, kpabe_pub_t pub, char* b )
 {
 	int offset;
 

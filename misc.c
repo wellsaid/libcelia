@@ -350,7 +350,6 @@ kpabe_pub_unserialize( kpabe_pub_t* pub, char* b )
 	unserialize_element(b, &offset, (*pub).Y);
 
 	(*pub).comps_len = unserialize_uint32(b, &offset);
-	(*pub).comps = heapmem_alloc((*pub).comps_len*sizeof(kpabe_pub_comp_t));
 
 	for( i = 0; i < (*pub).comps_len; i++ )
 	{

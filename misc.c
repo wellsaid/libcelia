@@ -456,6 +456,7 @@ void
 unserialize_policy( kpabe_policy_t* p, kpabe_pub_t pub, char* b, int* offset )
 {
 	int i;
+	static unsigned int stack_c = 1;
 
 	(*p).k = unserialize_uint32(b, offset);
 	(*p).attr = 0;
@@ -472,7 +473,8 @@ unserialize_policy( kpabe_policy_t* p, kpabe_pub_t pub, char* b, int* offset )
 		unserialize_element(b, offset, (*p).D);
 	}
 	else{
-		(*p).children = (kpabe_policy_t*) heapmem_alloc((*p).children_len*sizeof(kpabe_policy_t));
+		(*p).children = p + stack_c;
+		stack_c += (*p).children_len;
 		for( i = 0; i < (*p).children_len; i++ )
 			unserialize_policy(&(*p).children[i], pub, b, offset);
 	}

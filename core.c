@@ -693,7 +693,6 @@ void
 pick_sat_min_leaves( kpabe_policy_t* p )
 {
 	int i, k, l = 0;
-	int* c;
 
 	assert(p->satisfiable == 1);
 
@@ -705,7 +704,7 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 			if( p->children[i].satisfiable )
 				pick_sat_min_leaves(&p->children[i]);
 
-		c = heapmem_alloc(sizeof(int) * p->children_len);
+		int c[p->children_len];
 		for( i = 0; i < p->children_len; i++ )
 			c[i] = i;
 
@@ -734,8 +733,6 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 				p->satl[p->satl_len++] = k;
 			}
 		assert(l == p->k);
-
-		heapmem_free(c);
 	}
 }
 

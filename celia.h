@@ -137,7 +137,7 @@ kpabe_cph_t;
 int kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes );
 int kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy );
 size_t kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len );
-kpabe_cph_t* kpabe_enc( kpabe_pub_t* pub, element_t m );
+kpabe_cph_t kpabe_enc( kpabe_pub_t* pub, element_t m );
 size_t kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len);
 int kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m_e );
 
@@ -151,7 +151,7 @@ size_t kpabe_prv_serialize( char** b, kpabe_prv_t* prv );
 /*
   Also exactly what it seems.
 */
-void kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b);
+void kpabe_cph_unserialize( kpabe_cph_t* cph, kpabe_pub_t* pub, char* b );
 void kpabe_pub_unserialize( kpabe_pub_t* pub, char* b );
 void kpabe_prv_unserialize( kpabe_prv_t* prv, kpabe_pub_t pub, char* b );
 
@@ -159,10 +159,10 @@ void kpabe_prv_unserialize( kpabe_prv_t* prv, kpabe_pub_t pub, char* b );
 /*
   Again, exactly what it seems.
 */
-void kpabe_pub_free( kpabe_pub_t* pub );
+void kpabe_pub_free( kpabe_pub_t pub );
 void kpabe_msk_free( kpabe_msk_t* msk );
-void kpabe_prv_free( kpabe_prv_t* prv );
-void kpabe_cph_free( kpabe_cph_t* cph );
+void kpabe_prv_free( kpabe_prv_t prv );
+void kpabe_cph_free( kpabe_cph_t cph );
 
 /*
   Return a description of the last error that occured. Call this after

@@ -191,10 +191,10 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len )
 	int i;
 	uint8_t byte;
 	element_t m_e;
-	kpabe_cph_t* cph = kpabe_enc( pub, m_e );
+	kpabe_cph_t cph = kpabe_enc( pub, m_e );
 
 	char* cph_buf = NULL;
-	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, cph);
+	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, &cph);
 	kpabe_cph_free(cph);
 
 	char* aes_buf = NULL;
@@ -246,28 +246,26 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len )
  * @return				Ciphertext structure
  */
 
-kpabe_cph_t*
+kpabe_cph_t
 kpabe_enc( kpabe_pub_t* pub, element_t m_e )
 {
-	kpabe_cph_t* cph;
+	kpabe_cph_t cph;
  	element_t s;
 	int i, j;
 
 	/* initialize */
-	cph = heapmem_alloc(sizeof(kpabe_cph_t));
-
 	element_init_Zr(s, pub->p);
 	element_init_GT(m_e, pub->p);
-	element_init_GT(cph->Ep, pub->p);
+	element_init_GT(cph.Ep, pub->p);
 
 	/* compute */
  	element_random(m_e);
  	element_random(s);
-	element_pow_zn(cph->Ep, pub->Y, s);
-	element_mul(cph->Ep, cph->Ep, m_e);
+	element_pow_zn(cph.Ep, pub->Y, s);
+	element_mul(cph.Ep, cph.Ep, m_e);
 
-	cph->comps = heapmem_alloc((*pub).comps_len*sizeof(kpabe_cph_comp_t));
-	cph->comps_len = 0;
+	cph.comps = heapmem_alloc((*pub).comps_len*sizeof(kpabe_cph_comp_t));
+	cph.comps_len = 0;
 
 	for( i = 0; i < (*pub).comps_len; i++)
 	{
@@ -290,13 +288,13 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e )
 				if(j == (pub->comps_len - 1))
 				{
 					raise_error("Check your attribute universe,\nCertain attribute not include!\n");
-					return 0;
+					return cph;
 				}
 			}
 		}
 
-		memcpy(&cph->comps[i], &c, sizeof(kpabe_cph_comp_t));
-		cph->comps_len++;
+		memcpy(&cph.comps[i], &c, sizeof(kpabe_cph_comp_t));
+		cph.comps_len++;
 	}
 
 	return cph;
@@ -900,7 +898,7 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 	size_t a = 0;
 	uint8_t tmp;
 
-	kpabe_cph_t* cph;
+	kpabe_cph_t cph;
         
 	/* read plaintext len as 32-bit big endian int */
     size_t m_len = 0;
@@ -935,7 +933,7 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 
 	element_t m_e;
 	kpabe_cph_unserialize(&cph, pub, cph_buf);
-	kpabe_dec(pub, prv, cph, m_e);
+	kpabe_dec(pub, prv, &cph, m_e);
 
 	kpabe_cph_free(cph);
 

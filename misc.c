@@ -48,17 +48,15 @@ void
 init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 {
 	int key_len;
-	unsigned char* key_buf;
 
 	key_len = element_length_in_bytes(k) < 17 ? 17 : element_length_in_bytes(k);
-	key_buf = (unsigned char*) heapmem_alloc(key_len);
+	unsigned char key_buf[key_len];
 	element_to_bytes(key_buf, k);
 
 	if(enc)
 		mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
 	else
 		mbedtls_aes_setkey_dec(ctx, key_buf + 1, 128);
-	heapmem_free(key_buf);
 
 	memset(iv, 0, 16);
 }
@@ -87,8 +85,8 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 	/* stuff in real length (big endian) before padding */
 	size_t pt_final_len = 4 + pt_len;
 	pt_final_len += (16 - ((int) pt_final_len % 16));
-	unsigned char *pt_final = heapmem_alloc(pt_final_len*sizeof(char));
-	memset(pt_final, 0, pt_final_len*sizeof(char));
+	unsigned char pt_final[pt_final_len];
+	memset(pt_final, 0, pt_final_len);
 	
 	pt_final[0] = (pt_len & 0xff000000)>>24;
 	pt_final[1] = (pt_len & 0xff0000)>>16;
@@ -102,7 +100,6 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 			      (unsigned char*) pt_final,
 			      (unsigned char*) *ct);
 	
-	heapmem_free(pt_final);
 	mbedtls_aes_free(&ctx);
 	
 	return pt_final_len;
@@ -126,7 +123,7 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
 	mbedtls_aes_init(&ctx);
 	init_aes(&ctx, k, 0, iv);
 
-	unsigned char* pt_final = heapmem_alloc(ct_len);
+	unsigned char pt_final[ct_len];
 
 	if(mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, ct_len, iv,
 			      (unsigned char*) ct,
@@ -145,7 +142,6 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
 	*pt = heapmem_alloc(len);
 	memcpy(*pt, pt_final + 4, len); 
 
-	heapmem_free(pt_final);
 	return len;
 }
 
@@ -158,17 +154,15 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
  */
 
 void
-serialize_uint32( char** b, uint32_t k )
+serialize_uint32( char* b, uint32_t k )
 {
-	*b = heapmem_alloc(4);
-	
 	int i;
 	uint8_t byte;
 
 	for( i = 3; i >= 0; i-- )
 	{
 		byte = (k & 0xff<<(i*8))>>(i*8);
-		(*b)[3-i] = byte;
+		b[3-i] = byte;
 	}
 }
 
@@ -212,15 +206,13 @@ serialize_element( char** b, element_t e )
 	len = element_length_in_bytes(e);
 	*b = heapmem_alloc(4 + len);
 
-	char *buf1 = NULL;
-	serialize_uint32(&buf1, len);
+	char buf1[4];
+	serialize_uint32(buf1, len);
 	memcpy(*b, buf1, 4);
-	heapmem_free(buf1);
 
-	unsigned char* buf2 = (unsigned char*) heapmem_alloc(len);
+	unsigned char buf2[len];
 	element_to_bytes(buf2, e);
 	memcpy(*b + 4, buf2, len);
-	heapmem_free(buf2);
 	
 	return 4+len;
 }
@@ -238,16 +230,14 @@ void
 unserialize_element( char* b, int* offset, element_t e )
 {
 	uint32_t len;
-	unsigned char* buf;
 
 	len = unserialize_uint32(b, offset);
 
-	buf = (unsigned char*) heapmem_alloc(len);
+	unsigned char buf[len];
 	memcpy(buf, b + *offset, len);
 	*offset += len;
 
 	element_from_bytes(e, buf);
-	heapmem_free(buf);
 }
 
 /*!
@@ -263,7 +253,7 @@ kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
 	int i;
 	size_t final_len = 0;
 
-	char* buf1 = heapmem_alloc(strlen(pub->pairing_desc) + 1);
+	char buf1[strlen(pub->pairing_desc) + 1];
 	strcpy(buf1, pub->pairing_desc);
 	size_t buf1_len = strlen(buf1) + 1;
 	final_len += buf1_len;
@@ -273,8 +263,8 @@ kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
 	char* buf3 = NULL;
 	size_t buf3_len = serialize_element(&buf3, pub->Y);
 	final_len += buf3_len;
-	char* buf4 = NULL;
-	serialize_uint32(&buf4, pub->comps_len);
+	char buf4[4];
+	serialize_uint32(buf4, pub->comps_len);
 	final_len += 4;
 
 	char* buf5[pub->comps_len];
@@ -295,7 +285,6 @@ kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
 
 	memcpy(*b, buf1, buf1_len);
 	a += buf1_len;
-	heapmem_free(buf1);
 
 	memcpy(*b + a, buf2, buf2_len);
 	a += buf2_len;
@@ -307,7 +296,6 @@ kpabe_pub_serialize( char** b, kpabe_pub_t* pub )
 
 	memcpy(*b + a, buf4, 4);
 	a += 4;
-	heapmem_free(buf4);
 
 	for( i = 0; i < pub->comps_len; i++ )
 	{
@@ -380,25 +368,23 @@ serialize_policy( char** b, kpabe_policy_t* p )
 	int i;
 	size_t final_len = 0;
 
-	char* buf1 = NULL;
-	serialize_uint32(&buf1, (uint32_t) p->k);
+	char buf1[4];
+	serialize_uint32(buf1, (uint32_t) p->k);
 	final_len += 4;
 
-	char* buf2 = NULL;
-	serialize_uint32(&buf2, (uint32_t) p->children_len);
+	char buf2[4];
+	serialize_uint32(buf2, (uint32_t) p->children_len);
 	final_len += 4;
 
-	char* buf4 = NULL;
-	size_t buf4_len = 0;
+	size_t buf4_len = strlen(p->attr) + 1;
+	char buf4[buf4_len];
 	char* buf5 = NULL;
 	size_t buf5_len = 0;
 	char* buf6[p->children_len];
 	size_t buf6_len[p->children_len];
 	if( p->children_len == 0 )
 	{
-		buf4 = heapmem_alloc(strlen(p->attr) + 1);
 		strcpy(buf4, p->attr);
-		buf4_len = strlen(buf4) + 1;
 		buf5_len = serialize_element(&buf5, p->D);
 		final_len += buf4_len + buf5_len;
 	}
@@ -414,17 +400,14 @@ serialize_policy( char** b, kpabe_policy_t* p )
 
 	memcpy(*b, buf1, 4);
 	a += 4;
-	heapmem_free(buf1);
 
 	memcpy(*b + a, buf2, 4);
 	a += 4;
-	heapmem_free(buf2);
 
 	if( p->children_len == 0 )
 	{
 		memcpy(*b  + a, buf4, buf4_len);
 		a += buf4_len;
-		heapmem_free(buf4);
 
 		memcpy(*b  + a, buf5, buf5_len);
 		a += buf5_len;
@@ -527,8 +510,8 @@ kpabe_cph_serialize( char** b, kpabe_cph_t* cph )
     buf1_len = serialize_element(&buf1, cph->Ep);
 	final_len += buf1_len;
 
-	char* buf2  = NULL;
-        serialize_uint32(&buf2, cph->comps_len);
+	char buf2[4];
+    serialize_uint32(buf2, cph->comps_len);
 	final_len += 4;
 
 	char* buf3[cph->comps_len];
@@ -557,7 +540,6 @@ kpabe_cph_serialize( char** b, kpabe_cph_t* cph )
 
 	memcpy(*b + a, buf2, 4);
 	a += 4;
-	heapmem_free(buf2);
 
 	for( i = 0; i < cph->comps_len; i++ )
 	{
@@ -583,21 +565,20 @@ kpabe_cph_serialize( char** b, kpabe_cph_t* cph )
  */
 
 void
-kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b )
+kpabe_cph_unserialize( kpabe_cph_t* cph, kpabe_pub_t* pub, char* b )
 {
 	int i;
 	int offset = 0;
 
-	(*cph) = (kpabe_cph_t*) heapmem_alloc(sizeof(kpabe_cph_t));
 	offset = 0;
 
-	element_init_GT((*cph)->Ep, pub->p);
-	unserialize_element(b, &offset, (*cph)->Ep);
+	element_init_GT((*cph).Ep, pub->p);
+	unserialize_element(b, &offset, (*cph).Ep);
 
-	(*cph)->comps_len = unserialize_uint32(b, &offset);
-	(*cph)->comps = heapmem_alloc((*cph)->comps_len*sizeof(kpabe_cph_comp_t));
+	(*cph).comps_len = unserialize_uint32(b, &offset);
+	(*cph).comps = heapmem_alloc((*cph).comps_len*sizeof(kpabe_cph_comp_t));
 
-	for( i = 0; i < (*cph)->comps_len; i++ )
+	for( i = 0; i < (*cph).comps_len; i++ )
 	{
 		kpabe_cph_comp_t c;
 
@@ -609,7 +590,7 @@ kpabe_cph_unserialize( kpabe_cph_t** cph, kpabe_pub_t* pub, char* b )
 
 		unserialize_element(b, &offset, c.E);
 
-		memcpy(&(*cph)->comps[i], &c, sizeof(kpabe_cph_comp_t));
+		memcpy(&(*cph).comps[i], &c, sizeof(kpabe_cph_comp_t));
 	}
 }
 
@@ -648,27 +629,25 @@ kpabe_policy_free( kpabe_policy_t* p )
  */
 
 void
-kpabe_pub_free( kpabe_pub_t* pub )
+kpabe_pub_free( kpabe_pub_t pub )
 {
 	int i;
 
-	for( i = 0; i < pub->comps_len; i++ )
+	for( i = 0; i < pub.comps_len; i++ )
 	{
-		kpabe_pub_comp_t* c = &pub->comps[i];
-		memcpy(c, pub->comps + i, sizeof(kpabe_pub_comp_t));
+		kpabe_pub_comp_t* c = &pub.comps[i];
+		memcpy(c, pub.comps + i, sizeof(kpabe_pub_comp_t));
 		heapmem_free(c->attr);
 		c->attr = NULL;
 		element_clear(c->T);
 	}
 
-	heapmem_free(pub->comps);
+	heapmem_free(pub.comps);
 	
-	element_clear(pub->g);
-	element_clear(pub->Y);
-	pairing_clear(pub->p);
-	heapmem_free(pub->pairing_desc);
-
-	heapmem_free(pub);
+	element_clear(pub.g);
+	element_clear(pub.Y);
+	pairing_clear(pub.p);
+	heapmem_free(pub.pairing_desc);
 }
 
 /*!
@@ -705,10 +684,10 @@ kpabe_msk_free( kpabe_msk_t* msk )
  */
 
 void
-kpabe_prv_free( kpabe_prv_t* prv )
+kpabe_prv_free( kpabe_prv_t prv )
 {
-	kpabe_policy_free(prv->p);
-	heapmem_free(prv->p);
+	kpabe_policy_free(prv.p);
+	heapmem_free(prv.p);
 }
 
 /*!
@@ -719,22 +698,20 @@ kpabe_prv_free( kpabe_prv_t* prv )
  */
 
 void
-kpabe_cph_free( kpabe_cph_t* cph )
+kpabe_cph_free( kpabe_cph_t cph )
 {
 	int i;
 
-	element_clear(cph->Ep);
+	element_clear(cph.Ep);
 
 
-	for( i = 0; i < cph->comps_len; i++ )
+	for( i = 0; i < cph.comps_len; i++ )
 	{
 		kpabe_cph_comp_t c;
 
-		c = cph->comps[i];
+		c = cph.comps[i];
 		c.attr = NULL;
 		element_clear(c.E);
 	}
-	heapmem_free(cph->comps);
-
-	heapmem_free(cph);
+	heapmem_free(cph.comps);
 }

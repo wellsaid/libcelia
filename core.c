@@ -27,8 +27,7 @@
 #include <time.h>
 
 #include "celia.h"
-
-#include <os/lib/heapmem.h>
+#include "config.h"
 
 /********************************************************************************
  * Goyal-Pandey-Sahai-Waters Implementation
@@ -37,37 +36,6 @@
 #ifndef KPABE_DEBUG
 #define NDEBUG
 #endif
-
-#define TYPE_A_PARAMS \
-"type a\n" \
-"q 87807107996633125224377819847540498158068831994142082" \
-"1102865339926647563088022295707862517942266222142315585" \
-"8769582317459277713367317481324925129998224791\n" \
-"h 12016012264891146079388821366740534204802954401251311" \
-"822919615131047207289359704531102844802183906537786776\n" \
-"r 730750818665451621361119245571504901405976559617\n" \
-"exp2 159\n" \
-"exp1 107\n" \
-"sign1 1\n" \
-"sign0 1\n"
-
-/*
-#define TYPE_d224_PARAMS \
-"type d\n" \
-"q 15028799613985034465755506450771565229282832217860390155996483840017\n" \
-"n 15028799613985034465755506450771561352583254744125520639296541195021\n" \
-"h 1\n" \
-"r 15028799613985034465755506450771561352583254744125520639296541195021\n" \
-"a 1871224163624666631860092489128939059944978347142292177323825642096\n" \
-"b 9795501723343380547144152006776653149306466138012730640114125605701\n" \
-"k 6\n" \
-"nk 11522474695025217370062603013790980334538096429455689114222024912184432319228393204650383661781864806076247259556378350541669994344878430136202714945761488385890619925553457668158504202786580559970945936657636855346713598888067516214634859330554634505767198415857150479345944721710356274047707536156296215573412763735135600953865419000398920292535215757291539307525639675204597938919504807427238735811520\n" \
-"hk 51014915936684265604900487195256160848193571244274648855332475661658304506316301006112887177277345010864012988127829655449256424871024500368597989462373813062189274150916552689262852603254011248502356041206544262755481779137398040376281542938513970473990787064615734720\n" \
-"coeff0 11975189258259697166257037825227536931446707944682470951111859446192\n" \
-"coeff1 13433042200347934827742738095249546804006687562088254057411901362771\n" \
-"coeff2 8327464521117791238079105175448122006759863625508043495770887411614\n" \
-"nqr 142721363302176037340346936780070353538541593770301992936740616924\n"
-*/
 
 /*!
  * Last error call back for display
@@ -117,58 +85,49 @@ raise_error(char* fmt, ...)
  */
 
 int
-kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num_attributes )
+kpabe_setup( kpabe_pub_t* pub, kpabe_msk_t* msk, char attributes[NUM_ATTR_CELIA][ATTR_LEN_CELIA+1] )
 {
 	element_t tmp;	/* G_1 */
 	int i;
 
-	/* initialize */
-	*pub = heapmem_alloc(sizeof(kpabe_pub_t));
-	*msk = heapmem_alloc(sizeof(kpabe_msk_t));
-
-	(*pub)->pairing_desc = heapmem_alloc(strlen(TYPE_A_PARAMS)+1);
-	strcpy((*pub)->pairing_desc, TYPE_A_PARAMS);
-	if( pairing_init_set_buf((*pub)->p, (*pub)->pairing_desc, strlen((*pub)->pairing_desc)) ){
+	strcpy(pub->pairing_desc, TYPE_A_PARAMS);
+	if( pairing_init_set_buf(pub->p, pub->pairing_desc, strlen(pub->pairing_desc)) ){
 		return 0;
 	}
 
-	element_init_G1((*pub)->g, (*pub)->p);
-	element_init_G1(tmp, (*pub)->p);
-	element_init_GT((*pub)->Y, (*pub)->p);
-	element_init_Zr((*msk)->y, (*pub)->p);
+	element_init_G1(pub->g, pub->p);
+	element_init_G1(tmp, pub->p);
+	element_init_GT(pub->Y, pub->p);
+	element_init_Zr(msk->y, pub->p);
 
-	(*pub)->comps = heapmem_alloc(num_attributes*sizeof(kpabe_pub_comp_t));
-	(*pub)->comps_len = 0;
-	(*msk)->comps = heapmem_alloc(num_attributes*sizeof(kpabe_msk_comp_t));
-	(*msk)->comps_len = 0;
+	pub->comps_len = 0;
+	msk->comps_len = 0;
 	
 	/* compute */
- 	element_random((*msk)->y);
-	element_random((*pub)->g);
+ 	element_random(msk->y);
+	element_random(pub->g);
 
-	element_pow_zn(tmp, (*pub)->g, (*msk)->y);
-	pairing_apply((*pub)->Y, (*pub)->g, tmp, (*pub)->p);
+	element_pow_zn(tmp, pub->g, msk->y);
+	pairing_apply(pub->Y, pub->g, tmp, pub->p);
 
-	for( i = 0; i < num_attributes; i++)
+	for( i = 0; i < NUM_ATTR_CELIA; i++)
 	{
 		kpabe_pub_comp_t TA;
 		kpabe_msk_comp_t ta;
 
-		TA.attr = heapmem_alloc(strlen(attributes[i])+1);
 		strcpy(TA.attr, attributes[i]);
-		ta.attr = heapmem_alloc(strlen(TA.attr)+1);
 		strcpy(ta.attr, TA.attr);
 
-		element_init_Zr(ta.t, (*pub)->p);
-		element_init_G1(TA.T, (*pub)->p);
+		element_init_Zr(ta.t, pub->p);
+		element_init_G1(TA.T, pub->p);
 
  		element_random(ta.t);
-		element_pow_zn(TA.T, (*pub)->g, ta.t);
+		element_pow_zn(TA.T, pub->g, ta.t);
 
-		memcpy(&(*pub)->comps[i], &TA, sizeof(kpabe_pub_comp_t));
-		(*pub)->comps_len++;
-		memcpy(&(*msk)->comps[i], &ta, sizeof(kpabe_msk_comp_t));
-		(*msk)->comps_len++;
+		memcpy(&pub->comps[i], &TA, sizeof(kpabe_pub_comp_t));
+		pub->comps_len++;
+		memcpy(&msk->comps[i], &ta, sizeof(kpabe_msk_comp_t));
+		msk->comps_len++;
 	}
 	
 	return 1;
@@ -185,56 +144,18 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
  * @return				Length of ciphertext
  */
 
-size_t
-kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len )
+void
+kpabe_enc_byte_array( kpabe_cph_t* cph, char aes_buf[AES_LEN_CELIA], kpabe_pub_t* pub, char  m[MSG_LEN_CELIA+1] )
 {
 	int i;
 	uint8_t byte;
 	element_t m_e;
-	kpabe_cph_t cph = kpabe_enc( pub, m_e );
+	kpabe_enc( cph, pub, m_e );
 
-	char* cph_buf = NULL;
-	size_t cph_buf_len = kpabe_cph_serialize(&cph_buf, &cph);
-	kpabe_cph_free(cph);
-
-	char* aes_buf = NULL;
-	size_t aes_buf_len = aes_128_cbc_encrypt(&aes_buf, m, m_len, m_e);
+	aes_128_cbc_encrypt(aes_buf, m, m_e);
 	element_clear(m_e);
 
-	size_t c_len = 12 + aes_buf_len + cph_buf_len;
-	*c = heapmem_alloc(c_len);
-
 	size_t a = 0;
-
-	/* write plaintext len as 32-bit big endian int */
-	for( i = 3; i >= 0; i-- )
-	{
-		byte = (m_len & 0xff<<(i*8))>>(i*8);
-		(*c)[a] = byte;
-		a++;
-	}
-
-	/* write aes_buf */
-	for( i = 3; i >= 0; i-- ){
-		byte = (aes_buf_len & 0xff<<(i*8))>>(i*8);
-		(*c)[a] = byte;
-		a++;
-	}
-	memcpy(*c + a, aes_buf, aes_buf_len);
-	a += aes_buf_len;
-
-	/* write cph_buf */
-	for( i = 3; i >= 0; i-- ){
-		byte = (cph_buf_len & 0xff<<(i*8))>>(i*8);
-		(*c)[a] = byte;
-		a++;
-	}
-	memcpy(*c + a, cph_buf, cph_buf_len);
-
-	heapmem_free(cph_buf);
-	heapmem_free(aes_buf);
-
-	return c_len;
 }
 
 /*!
@@ -246,33 +167,30 @@ kpabe_enc_byte_array( char** c, kpabe_pub_t* pub, char*  m, size_t m_len )
  * @return				Ciphertext structure
  */
 
-kpabe_cph_t
-kpabe_enc( kpabe_pub_t* pub, element_t m_e )
+void
+kpabe_enc( kpabe_cph_t* cph, kpabe_pub_t* pub, element_t m_e )
 {
-	kpabe_cph_t cph;
  	element_t s;
 	int i, j;
 
 	/* initialize */
 	element_init_Zr(s, pub->p);
 	element_init_GT(m_e, pub->p);
-	element_init_GT(cph.Ep, pub->p);
+	element_init_GT(cph->Ep, pub->p);
 
 	/* compute */
  	element_random(m_e);
  	element_random(s);
-	element_pow_zn(cph.Ep, pub->Y, s);
-	element_mul(cph.Ep, cph.Ep, m_e);
+	element_pow_zn(cph->Ep, pub->Y, s);
+	element_mul(cph->Ep, cph->Ep, m_e);
 
-	cph.comps = heapmem_alloc((*pub).comps_len*sizeof(kpabe_cph_comp_t));
-	cph.comps_len = 0;
+	cph->comps_len = 0;
 
-	for( i = 0; i < (*pub).comps_len; i++)
+	for( i = 0; i < pub->comps_len; i++)
 	{
 		kpabe_cph_comp_t c;
 
-		c.attr = heapmem_alloc(strlen((*pub).comps[i].attr) + 1);
-		strcpy(c.attr, (*pub).comps[i].attr);
+		strcpy(c.attr, pub->comps[i].attr);
 
 		element_init_G1(c.E, pub->p);
 
@@ -288,16 +206,14 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e )
 				if(j == (pub->comps_len - 1))
 				{
 					raise_error("Check your attribute universe,\nCertain attribute not include!\n");
-					return cph;
+					return;
 				}
 			}
 		}
 
-		memcpy(&cph.comps[i], &c, sizeof(kpabe_cph_comp_t));
-		cph.comps_len++;
+		memcpy(&cph->comps[i], &c, sizeof(kpabe_cph_comp_t));
+		cph->comps_len++;
 	}
-
-	return cph;
 }
 
 /*!
@@ -310,19 +226,11 @@ kpabe_enc( kpabe_pub_t* pub, element_t m_e )
  */
 
 void
-base_node( kpabe_policy_t** p, int k, char* s )
+base_node( kpabe_policy_t* p, int k, char s[ATTR_LEN_CELIA+1] )
 {
-	(*p) = heapmem_alloc(sizeof(kpabe_policy_t));
-	(*p)->k = k;
-	if(s){
-		(*p)->attr = heapmem_alloc(strlen(s)+1);
-		strcpy((*p)->attr, s);
-	} else {
-		(*p)->attr = 0;
-	}
-	(*p)->children = 0;
-	(*p)->children_len = 0;
-	(*p)->q = 0;
+	p->k = k;
+	strcpy(p->attr, s);
+	p->children_len = 0;
 }
 
 /* Helper method:
@@ -350,32 +258,31 @@ strtok_count( char* s,  const char* delim )
  * @return				Policy root node data structure
  */
 int
-parse_policy_postfix( kpabe_policy_t** root, char* s )
+parse_policy_postfix( kpabe_policy_t* root, char* s )
 {
 	int i;
 	
 	char*  tok;
-	kpabe_policy_t* stack;
 	size_t stack_len = 0;
 	kpabe_policy_t* top;
 
-	stack    = heapmem_alloc((strtok_count(s, " ")+1)*sizeof(kpabe_policy_t));
-	top = stack;
+	kpabe_policy_t stack[(strtok_count(s, " ")+1)*sizeof(kpabe_policy_t)];
+	top = &stack[0];
 
-	char* s_tmp = heapmem_alloc(strlen(s)+1);
+	char s_tmp[strlen(s)+1];
 	strcpy(s_tmp,s);
 	
 	tok = strtok(s_tmp, " ");
 	while( tok )
 	{
 		int k, n;
-		kpabe_policy_t* node;
+		kpabe_policy_t node;
 		
 		if( sscanf(tok, "%dof%d", &k, &n) != 2 )
 		{
 			/* push leaf token */
 			base_node(&node, 1, tok);
-			memcpy(top++, node, sizeof(kpabe_policy_t));
+			memcpy(top++, &node, sizeof(kpabe_policy_t));
 			stack_len++;
 		}
 		else
@@ -404,20 +311,17 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 			
 			/* pop n things and fill in children */
 			base_node(&node, k, 0);
-			node->children = heapmem_alloc(n*sizeof(kpabe_policy_t));
 			for( i = n - 1; i >= 0; i-- )
 			{
-				memcpy(&node->children[i], --top, sizeof(kpabe_policy_t));
+				memcpy(&node.children[i], --top, sizeof(kpabe_policy_t));
 				stack_len--;
-				node->children_len++;
+				node.children_len++;
 			}
 
 			/* push result */
-			memcpy(top++, node, sizeof(kpabe_policy_t));
+			memcpy(top++, &node, sizeof(kpabe_policy_t));
 			stack_len++;
 		}
-
-		heapmem_free(node);
 
 		tok = strtok(NULL, " ");
 	}
@@ -433,11 +337,7 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
 		return 0;
 	}
 
-	*root = heapmem_alloc(sizeof(kpabe_policy_t));
-	memcpy(*root, --top, sizeof(kpabe_policy_t));
-
-	heapmem_free(stack);
-	heapmem_free(s_tmp);
+	memcpy(root, --top, sizeof(kpabe_policy_t));
 	
 	return 1;
 }
@@ -451,21 +351,19 @@ parse_policy_postfix( kpabe_policy_t** root, char* s )
  * @return				Lagrange basis polynomial data structure
  */
 void
-rand_poly( kpabe_polynomial_t** q, int deg, element_t zero_val )
+rand_poly( kpabe_polynomial_t* q, int deg, element_t zero_val )
 {
 	int i;
 
-	(*q) = heapmem_alloc(sizeof(kpabe_polynomial_t));
-	(*q)->deg = deg;
-	(*q)->coef = heapmem_alloc((deg + 1)*sizeof(element_t));
+	q->deg = deg;
 
-	for( i = 0; i < (*q)->deg + 1; i++ )
-		element_init_same_as((*q)->coef[i], zero_val);
+	for( i = 0; i < q->deg + 1; i++ )
+		element_init_same_as(q->coef[i], zero_val);
 
-	element_set((*q)->coef[0], zero_val);
+	element_set(q->coef[0], zero_val);
 
-	for( i = 1; i < (*q)->deg + 1; i++ )
- 		element_random((*q)->coef[i]);
+	for( i = 1; i < q->deg + 1; i++ )
+ 		element_random(q->coef[i]);
 	
 }
 
@@ -536,7 +434,7 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
 		{
 			if( !strcmp(msk->comps[i].attr, p->attr) )
 			{
-				element_div(a, p->q->coef[0], msk->comps[i].t);
+				element_div(a, p->q.coef[0], msk->comps[i].t);
 				element_pow_zn(p->D, pub->g, a);
 				break;
 			}
@@ -556,7 +454,7 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
 		for( i = 0; i < p->children_len; i++ )
 		{
 			element_set_si(r, i + 1);
-			eval_poly(t, p->q, r);
+			eval_poly(t, &p->q, r);
 			if(!fill_policy(&p->children[i], pub, msk, t))
 				return 0;
 		}
@@ -578,16 +476,14 @@ fill_policy( kpabe_policy_t* p, kpabe_pub_t* pub, kpabe_msk_t* msk, element_t e 
  * @return				Private key data structure.
  */
 int
-kpabe_keygen( kpabe_prv_t** prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
+kpabe_keygen( kpabe_prv_t* prv, kpabe_pub_t* pub, kpabe_msk_t* msk, char* policy )
 {
 	/* initialize */
-	*prv = heapmem_alloc(sizeof(kpabe_prv_t));
-	(*prv)->p = NULL;
 
-	parse_policy_postfix(&(*prv)->p, policy);
+	parse_policy_postfix(&prv->p, policy);
 
 	/* compute */
-	if(!fill_policy((*prv)->p, pub, msk, msk->y))
+	if(!fill_policy(&prv->p, pub, msk, msk->y))
 		return 0;
 
 	return 1;
@@ -718,7 +614,6 @@ pick_sat_min_leaves( kpabe_policy_t* p )
 				p->satl_len++;
 			}
 		
-		p->satl = heapmem_alloc(p->satl_len*sizeof(int));
 		p->satl_len = 0;
 		p->min_leaves = 0;
 		l = 0;
@@ -891,58 +786,17 @@ dec_flatten( element_t r, kpabe_policy_t* p, kpabe_cph_t* cph, kpabe_pub_t* pub 
  * @return int				Successfully decrypt (size of 'm') or not (0)
  */
 
-size_t
-kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, size_t c_len)
+void
+kpabe_dec_byte_array( char m[MSG_LEN_CELIA+1], kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, char aes_buf[AES_LEN_CELIA] )
 {
 	int i;
 	size_t a = 0;
 	uint8_t tmp;
-
-	kpabe_cph_t cph;
-        
-	/* read plaintext len as 32-bit big endian int */
-    size_t m_len = 0;
-	for( i = 3; i >= 0; i-- )
-	{
-		m_len |= c[a]<<(i*8);
-		a++;
-	}
-
-	/* read aes buf */
-	size_t aes_buf_len = 0;
-	for( i = 3; i >= 0; i-- )
-	{
-		tmp = c[a];
-		aes_buf_len |= tmp<<(i*8);
-		a++;
-	}
-	char *aes_buf = heapmem_alloc(aes_buf_len);
-	memcpy(aes_buf, c + a, aes_buf_len);
-	a += aes_buf_len;
-    
-	/* read cph buf */
-	size_t cph_buf_len = 0;
-	for( i = 3; i >= 0; i-- )
-	{
-		tmp = c[a];
-		cph_buf_len |= tmp<<(i*8);
-		a++;
-	}
-	char* cph_buf = heapmem_alloc(cph_buf_len);
-	memcpy(cph_buf, c + a, cph_buf_len);	
-
 	element_t m_e;
-	kpabe_cph_unserialize(&cph, pub, cph_buf);
-	kpabe_dec(pub, prv, &cph, m_e);
 
-	kpabe_cph_free(cph);
+	kpabe_dec(pub, prv, cph, m_e);
 
-	m_len = aes_128_cbc_decrypt(m, aes_buf, aes_buf_len, m_e);
-
-	heapmem_free(aes_buf);
-	heapmem_free(cph_buf);
-
-	return m_len;
+	aes_128_cbc_decrypt(m, aes_buf, m_e);
 }
 
 /*!
@@ -962,16 +816,16 @@ kpabe_dec( kpabe_pub_t* pub, kpabe_prv_t* prv, kpabe_cph_t* cph, element_t m_e )
 	element_init_GT(m_e, pub->p);
 	element_init_GT(Ys, pub->p);
 	
-	if(!check_sat(prv->p,  cph, pub))
+	if(!check_sat(&prv->p,  cph, pub))
 		return 0;
- 	if( !prv->p->satisfiable )
+ 	if( !prv->p.satisfiable )
 	{
 		raise_error("cannot decrypt, attributes in ciphertext do not satisfy policy\n");
 		return 0;
 	}
 
-	pick_sat_min_leaves(prv->p);
-	dec_flatten(Ys, prv->p, cph, pub);
+	pick_sat_min_leaves(&prv->p);
+	dec_flatten(Ys, &prv->p, cph, pub);
 	element_div(m_e, cph->Ep, Ys);
 
 	return 1;

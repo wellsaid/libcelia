@@ -185,8 +185,6 @@ char* kpabe_error();
 void aes_128_cbc_encrypt( char ct[AES_LEN_CELIA], char pt[MSG_LEN_CELIA+1], element_t k );
 void aes_128_cbc_decrypt( char pt[MSG_LEN_CELIA+1], char ct[AES_LEN_CELIA], element_t k );
 
-void print_celia_config();
-
 #if defined (__cplusplus)
 } // extern "C"
 #endif

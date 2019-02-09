@@ -551,11 +551,3 @@ kpabe_cph_unserialize( kpabe_cph_t* cph, kpabe_pub_t* pub, char* b )
 		memcpy(&cph->comps[i], &c, sizeof(kpabe_cph_comp_t));
 	}
 }
-
-void print_celia_config(){
-	printf("[celia] ABE Benchmark program.\n");
-	printf("    Configuration:\n");
-	printf("        Number of attribute: %d\n", NUM_ATTR_CELIA);
-	printf("        Length of each attribute: %d\n", ATTR_LEN_CELIA);
-	printf("        Length of encrypted message: %d\n", MSG_LEN_CELIA);
-}

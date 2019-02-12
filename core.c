@@ -229,8 +229,9 @@ void
 base_node( kpabe_policy_t* p, int k, char s[ATTR_LEN_CELIA+1] )
 {
 	p->k = k;
-	strcpy(p->attr, s);
+	if(s != NULL) strcpy(p->attr, s);
 	p->children_len = 0;
+	p->children = NULL;
 }
 
 /* Helper method:
@@ -264,25 +265,26 @@ parse_policy_postfix( kpabe_policy_t* root, char* s )
 	
 	char*  tok;
 	size_t stack_len = 0;
-	kpabe_policy_t* top;
+	kpabe_policy_t* top_i;
+	kpabe_policy_t* top_e = root->children;
 
-	kpabe_policy_t stack[(strtok_count(s, " ")+1)*sizeof(kpabe_policy_t)];
-	top = &stack[0];
+	kpabe_policy_t stack[(strtok_count(s, " ")+1)];
+	top_i = &stack[0];
 
 	char s_tmp[strlen(s)+1];
 	strcpy(s_tmp,s);
 	
 	tok = strtok(s_tmp, " ");
+	kpabe_policy_t node;
 	while( tok )
 	{
 		int k, n;
-		kpabe_policy_t node;
 		
 		if( sscanf(tok, "%dof%d", &k, &n) != 2 )
 		{
 			/* push leaf token */
 			base_node(&node, 1, tok);
-			memcpy(top++, &node, sizeof(kpabe_policy_t));
+			memcpy(top_i++, &node, sizeof(kpabe_policy_t));
 			stack_len++;
 		}
 		else
@@ -311,15 +313,18 @@ parse_policy_postfix( kpabe_policy_t* root, char* s )
 			
 			/* pop n things and fill in children */
 			base_node(&node, k, 0);
+			node.children = top_e;
 			for( i = n - 1; i >= 0; i-- )
 			{
-				memcpy(&node.children[i], --top, sizeof(kpabe_policy_t));
+				memcpy(&node.children[i], --top_i, sizeof(kpabe_policy_t));
 				stack_len--;
 				node.children_len++;
 			}
+			top_e += n;
+
 
 			/* push result */
-			memcpy(top++, &node, sizeof(kpabe_policy_t));
+			memcpy(top_i++, &node, sizeof(kpabe_policy_t));
 			stack_len++;
 		}
 
@@ -337,7 +342,7 @@ parse_policy_postfix( kpabe_policy_t* root, char* s )
 		return 0;
 	}
 
-	memcpy(root, --top, sizeof(kpabe_policy_t));
+	memcpy(root, --top_i, sizeof(kpabe_policy_t));
 	
 	return 1;
 }

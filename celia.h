@@ -90,7 +90,7 @@ typedef struct
 {
 	int deg;
 	/* coefficients from [0] x^0 to [deg] x^deg */
-	element_t coef[5]; /* Z_p (of length deg + 1) */
+	element_t coef[NUM_ATTR_CELIA]; /* Z_p (of length deg + 1) */
 }
 kpabe_polynomial_t;
 

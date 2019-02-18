@@ -119,8 +119,8 @@ AC_ARG_WITH(
 You must specify an absolute path for --with-pbc-lib.
 ]) ;;
     esac
-    PBC_LIBS="-L$withval -Wl,-rpath $withval -lpbc"
-  ], [PBC_LIBS="-lpbc"])
+    PBC_LIBS="-L$withval -Wl,-rpath $withval -lpbc -lm"
+  ], [PBC_LIBS="-lpbc -lm"])
 
 BACKUP_CFLAGS=${CFLAGS}
 BACKUP_LIBS=${LIBS}

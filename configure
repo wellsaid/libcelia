@@ -3785,10 +3785,10 @@ if test "${with_pbc_lib+set}" = set; then :
 You must specify an absolute path for --with-pbc-lib.
 " "$LINENO" 5 ;;
     esac
-    PBC_LIBS="-L$withval -Wl,-rpath $withval -lpbc"
+    PBC_LIBS="-L$withval -Wl,-rpath $withval -lpbc -lm"
 
 else
-  PBC_LIBS="-lpbc"
+  PBC_LIBS="-lpbc -lm"
 fi
 
 

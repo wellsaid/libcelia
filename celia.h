@@ -149,7 +149,7 @@ kpabe_cph_comp_t;
 typedef struct
 {
 	element_t Ep; 		/* G_T */
-	kpabe_cph_comp_t comps[NUM_ATTR_CELIA];
+	kpabe_cph_comp_t* comps;
 	size_t comps_len;
 }
 kpabe_cph_t;

@@ -41,6 +41,12 @@
 extern "C" {
 #endif
 
+#define print_celia_config \
+       LOG_DBG("    Celia configuration:\n"); \
+       LOG_DBG("        num_attr: %d\n", NUM_ATTR_CELIA); \
+       LOG_DBG("        attr_len: %d\n", ATTR_LEN_CELIA); \
+       LOG_DBG("        msg_len: %d\n", MSG_LEN_CELIA);
+
 /*
   one attribute structure in public key
 */

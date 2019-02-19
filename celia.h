@@ -56,11 +56,11 @@ kpabe_pub_comp_t;
 */
 typedef struct
 {
-	char pairing_desc[360];
+	char* pairing_desc;
 	pairing_t p;
 	element_t g;           /* G_1 */
 	element_t Y; 		   /* G_T */
-	kpabe_pub_comp_t comps[NUM_ATTR_CELIA];
+	kpabe_pub_comp_t* comps;
 	size_t comps_len;
 }
 kpabe_pub_t;

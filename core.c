@@ -145,6 +145,7 @@ kpabe_setup( kpabe_pub_t** pub, kpabe_msk_t** msk, char** attributes, size_t num
 
 	element_pow_zn(tmp, (*pub)->g, (*msk)->y);
 	pairing_apply((*pub)->Y, (*pub)->g, tmp, (*pub)->p);
+	element_clear(tmp);
 
 	for( i = 0; i < num_attributes; i++)
 	{
@@ -937,14 +938,12 @@ kpabe_dec_byte_array( char** m, kpabe_pub_t* pub, kpabe_prv_t* prv, char * c, si
 
 	element_t m_e;
 	kpabe_cph_unserialize(&cph, pub, cph_buf);
+	heapmem_free(cph_buf);
 	kpabe_dec(pub, prv, cph, m_e);
-
 	kpabe_cph_free(cph);
 
 	m_len = aes_128_cbc_decrypt(m, aes_buf, aes_buf_len, m_e);
-
 	heapmem_free(aes_buf);
-	heapmem_free(cph_buf);
 
 	return m_len;
 }

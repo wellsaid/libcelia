@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pbc.h>
+
 #include <mbedtls/aes.h>
 
 #include "celia.h"
@@ -54,6 +55,10 @@ init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 	key_buf = (unsigned char*) heapmem_alloc(key_len);
 	element_to_bytes(key_buf, k);
 
+	char key_buf_str[2*key_len + 1];
+	tmp_byte_array_to_str(key_buf_str, key_buf, key_len);
+	printf("[init_aes] key_buf: %s\n", key_buf_str);
+
 	if(enc)
 		mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
 	else
@@ -61,6 +66,17 @@ init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 	heapmem_free(key_buf);
 
 	memset(iv, 0, 16);
+}
+
+void tmp_byte_array_to_str(char* dest, char* array, size_t array_len){
+	size_t i;
+	dest[0] = '\0';
+
+	char tmp[3];
+	for( i = 0; i < array_len; i++){
+	    sprintf(tmp, "%02X", (uint8_t) array[i]);
+		strcat(dest, tmp);
+	}
 }
 
 /*!
@@ -76,6 +92,14 @@ init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 size_t
 aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 {
+	char pt_str[2*pt_len + 1];
+	tmp_byte_array_to_str(pt_str, pt, pt_len);
+	printf("[aes_128_cbc_encrypt] pt: %s\n", pt_str);
+
+	char k_str[1024];
+	element_snprintf(k_str, 1024, "%B", k);
+	printf("[aes_128_cbc_encrypt] k: %s\n", k_str);
+
 	unsigned char iv[16];
 
 	mbedtls_aes_context ctx;
@@ -87,8 +111,8 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 	/* stuff in real length (big endian) before padding */
 	size_t pt_final_len = 4 + pt_len;
 	pt_final_len += (16 - ((int) pt_final_len % 16));
-	unsigned char *pt_final = heapmem_alloc(pt_final_len*sizeof(char));
-	memset(pt_final, 0, pt_final_len*sizeof(char));
+	char *pt_final = heapmem_alloc(pt_final_len);
+	memset(pt_final, 0, pt_final_len);
 	
 	pt_final[0] = (pt_len & 0xff000000)>>24;
 	pt_final[1] = (pt_len & 0xff0000)>>16;
@@ -97,7 +121,11 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 
 	memcpy(pt_final + 4, pt, pt_len);
 	
+	char pt_final_str[2*pt_final_len + 1];
+	tmp_byte_array_to_str(pt_final_str, pt_final, pt_final_len);
+	printf("[aes_128_cbc_encrypt] pt_final: %s (size: %ld)\n", pt_final_str, (long) pt_final_len);
 	*ct = heapmem_alloc(pt_final_len);
+
 	mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, pt_final_len, iv,
 			      (unsigned char*) pt_final,
 			      (unsigned char*) *ct);
@@ -105,6 +133,10 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 	heapmem_free(pt_final);
 	mbedtls_aes_free(&ctx);
 	
+	char ct_str[2*pt_final_len + 1];
+	tmp_byte_array_to_str(ct_str, *ct, pt_final_len);
+	printf("[aes_128_cbc_encrypt] ct: %s\n", ct_str);
+
 	return pt_final_len;
 }
 
@@ -122,16 +154,28 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
 	unsigned char iv[16];
 	unsigned int len;
 
+	char ct_str[2*ct_len + 1];
+	tmp_byte_array_to_str(ct_str, ct, ct_len);
+	printf("[aes_128_cbc_decrypt] ct: %s\n", ct_str);
+
+	char k_str[1024];
+	element_snprintf(k_str, 1024, "%B", k);
+	printf("[aes_128_cbc_decrypt] k: %s\n", k_str);
+
 	mbedtls_aes_context ctx;
 	mbedtls_aes_init(&ctx);
 	init_aes(&ctx, k, 0, iv);
 
-	unsigned char* pt_final = heapmem_alloc(ct_len);
+	char* pt_final = heapmem_alloc(ct_len);
 
 	if(mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, ct_len, iv,
-			      (unsigned char*) ct,
-				 pt_final) == MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH)		
+			     (unsigned char*) ct,
+				 (unsigned char*) pt_final) == MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH)
 		return 0;
+
+	char pt_final_str[2*ct_len + 1];
+	tmp_byte_array_to_str(pt_final_str, pt_final, ct_len);
+	printf("[aes_128_cbc_decrypt] pt_final: %s (size: %ld)\n", pt_final_str, (long) ct_len);
 
 	/* TODO make less crufty */
 
@@ -144,6 +188,10 @@ aes_128_cbc_decrypt( char** pt, char* ct, size_t ct_len, element_t k )
 	/* truncate any garbage from the padding */
 	*pt = heapmem_alloc(len);
 	memcpy(*pt, pt_final + 4, len); 
+
+	char pt_str[2*len + 1];
+	tmp_byte_array_to_str(pt_str, *pt, len);
+	printf("[aes_128_cbc_decrypt] pt: %s\n", pt_str);
 
 	heapmem_free(pt_final);
 	return len;

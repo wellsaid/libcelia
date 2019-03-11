@@ -29,6 +29,9 @@
 #include "celia.h"
 
 #include <os/lib/heapmem.h>
+#if defined(CONTIKI_TARGET_ZOUL)
+#include <dev/cbc.h>
+#endif
 
 
 /********************************************************************************
@@ -59,10 +62,18 @@ init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 	tmp_byte_array_to_str(key_buf_str, key_buf, key_len);
 	printf("[init_aes] key_buf: %s\n", key_buf_str);
 
+#if defined(CONTIKI_TARGET_ZOUL)
+	uint8_t ret;
+	if( (ret = aes_load_keys(key_buf + 1, AES_KEY_STORE_SIZE_KEY_SIZE_128, 1, 0)) != CRYPTO_SUCCESS){
+		printf("ERROR: loading keys (error: %d)\n", ret);
+		exit(1);
+	}
+#else
 	if(enc)
 		mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
 	else
 		mbedtls_aes_setkey_dec(ctx, key_buf + 1, 128);
+#endif
 	heapmem_free(key_buf);
 
 	memset(iv, 0, 16);
@@ -126,9 +137,24 @@ aes_128_cbc_encrypt( char **ct, char* pt, size_t pt_len, element_t k )
 	printf("[aes_128_cbc_encrypt] pt_final: %s (size: %ld)\n", pt_final_str, (long) pt_final_len);
 	*ct = heapmem_alloc(pt_final_len);
 
+#if defined(CONTIKI_TARGET_ZOUL)
+	uint8_t ret;
+	if( (ret = cbc_crypt_start(1, 0, iv, pt_final, *ct, pt_final_len, NULL)) != CRYPTO_SUCCESS){
+		printf("ERROR: starting cbc operation (error: %d)\n", ret);
+		exit(1);
+	}
+
+	while( (ret = cbc_crypt_check_status()) == CRYPTO_PENDING  ); /* TODO: Ugly way to wait */
+
+	if( ret != CRYPTO_SUCCESS ){
+		printf("ERROR: performing cbc operation (error: %d)\n", ret);
+		exit(1);
+	}
+#else
 	mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, pt_final_len, iv,
 			      (unsigned char*) pt_final,
 			      (unsigned char*) *ct);
+#endif
 	
 	heapmem_free(pt_final);
 	mbedtls_aes_free(&ctx);

@@ -66,13 +66,13 @@ init_aes( mbedtls_aes_context* ctx, element_t k, int enc, unsigned char* iv )
 	printf("[init_aes] key_buf: %s\n", key_buf_str);
 
 #if defined(CONTIKI_TARGET_ZOUL)
+	crypto_init();
+
 	uint8_t ret;
 	if( (ret = aes_load_keys(key_buf + 1, AES_KEY_STORE_SIZE_KEY_SIZE_128, 1, 0)) != CRYPTO_SUCCESS){
 		printf("ERROR: loading keys (error: %d)\n", ret);
 		exit(1);
 	}
-
-	crypto_enable();
 #else
 	if(enc)
 		mbedtls_aes_setkey_enc(ctx, key_buf + 1, 128);
